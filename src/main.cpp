@@ -12,7 +12,10 @@ int main(int argc, char** args)
   // these spheres, which must be at roughly 2.25r for
   // this. why is this? Must test with planes after!!!
   Scene scene;
-  scene.prims.push_back( Shape(Vec3(0.0f,0.0f,-0.9f), 0.4f) );
+  scene.prims.push_back( Shape(Vec3(0.0f,-30.0f,0.0), 30.0f) );
+  scene.prims.push_back( Shape(Vec3(-0.3f,0.0f,-1.0f), 0.1f) );
+  scene.prims.push_back( Shape(Vec3( 0.0f,0.0f,-1.0f), 0.1f) );
+  scene.prims.push_back( Shape(Vec3( 0.3f,0.0f,-1.5f), 0.1f) );
 
   // configure integrator and film settings ----------
   Integrator integrator;

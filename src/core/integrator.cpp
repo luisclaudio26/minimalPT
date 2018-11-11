@@ -37,8 +37,9 @@ void Integrator::render(const Scene& scene)
       Isect isect;
       if( scene.cast_ray(primary_ray, isect) )
       {
-        RGBA normal = RGBA(isect.normal.x, isect.normal.y, isect.normal.z, 1.0f);
-        sample_color = (normal+1.0f)*0.5f;
+        //RGBA normal = RGBA(isect.normal.x, isect.normal.y, isect.normal.z, 1.0f);
+        //sample_color = (normal+1.0f)*0.5f;
+        sample_color = RGBA(isect.shape->diff_color, 1.0f);
       }
 
       // output to color buffer

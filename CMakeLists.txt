@@ -10,19 +10,8 @@ include_directories(include)
 include_directories(3rdparty)
 
 #Source files
-file(GLOB SOURCES #"3rdparty/tiny_obj_loader.cpp"
-                  "src/*.cpp"
-                  "src/core/camera.cpp"
-                  "src/core/integrator.cpp"
-                  "src/core/scene.cpp"
-                  "src/core/shape.cpp"
-#                  "src/camera/*.cpp"
-#                  "src/util/*.cpp"
-#                  "src/shape/*.cpp"
-#                  "src/texture/*.cpp"
-#                  "src/integrator/*.cpp"
-#                  "src/kdtree/*.cpp"
-#                  "src/material/*.cpp"
+file(GLOB SOURCES "src/*.cpp"
+                  "src/core/*.cpp"
                   "src/frontend/*.cpp")
 
 #Link libraries
