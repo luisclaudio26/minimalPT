@@ -20,9 +20,25 @@ Integrator::Integrator()
 
 void Integrator::render(const Scene& scene)
 {
-  // minimal working test
-  static int tmp = 0;
-  color_buffer[tmp] = RGBA(1.0f, 1.0f, 1.0f, 1.0f);
-  if(tmp > 0) color_buffer[tmp-1] = RGBA(0.0f, 0.0f, 0.0f, 1.0f);
-  tmp = (tmp == vRes*hRes-1) ? 0 : tmp+1;
+  // loop over pixels in film, sampling them
+  // on the center. trace primary ray and return
+  // black/white if we had an intersection or not
+  for(int j = 0; j < vRes; ++j)
+    for(int i = 0; i < hRes; ++i)
+    {
+      RGBA sample_color(0.0f, 0.0f, 0.0f, 1.0f);
+
+      // coordinates of the sample in [0,1]² range
+      // (film coordinate system), flipping the v-axis (j-axis)
+      Vec2 uv( (i+0.5f)/hRes, ((vRes-1)-j+0.5f)/vRes );
+
+      // get primary ray and check intersections
+      Ray primary_ray = scene.cam.get_primary_ray(uv);
+      Isect isect;
+      if( scene.cast_ray(primary_ray, isect) )
+        sample_color.r = 0.4f;
+
+      // output to color buffer
+      color_buffer[j*hRes+i] = sample_color;
+    }
 }

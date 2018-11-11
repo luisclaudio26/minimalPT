@@ -48,6 +48,7 @@ GUI::GUI(const Scene& scene, Integrator& integrator)
 
 void GUI::drawContents()
 {
+  // update colorbuffer
   integrator.render(this->scene);
 
   //---------- displaying ----------

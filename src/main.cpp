@@ -11,7 +11,7 @@ int main(int argc, char** args)
   // configure integrator and film settings ----------
   Integrator integrator;
 
-  // --------- invoke renderer ----------
+  // invoke renderer ----------
   nanogui::init();
 
   GUI myGUI(scene, integrator);
