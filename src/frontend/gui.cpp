@@ -48,8 +48,14 @@ GUI::GUI(const Scene& scene, Integrator& integrator)
 
 void GUI::drawContents()
 {
-  // update colorbuffer
-  integrator.render(this->scene);
+  // update frame by requesting more samples
+  static int spp_count = 0;
+  if( spp_count < 64 )
+  {
+    integrator.render(this->scene);
+    spp_count++;
+    std::cout<<"\rComputed "<<spp_count<<" samples per pixel"<<std::flush;
+  }
 
   //---------- displaying ----------
   shader.bind();
@@ -58,7 +64,7 @@ void GUI::drawContents()
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, this->width(), this->height(),
-  	               GL_RGBA, GL_FLOAT, (void*)integrator.color_buffer.data());
+  	               GL_RGBA, GL_FLOAT, (void*)integrator.frame.data());
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

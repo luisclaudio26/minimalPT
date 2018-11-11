@@ -8,5 +8,6 @@ typedef glm::vec3 RGB;
 typedef glm::vec4 RGBA;
 
 typedef std::vector<RGBA> ColorBuffer;
+typedef std::vector<RGB> RadianceBuffer;
 
 #endif

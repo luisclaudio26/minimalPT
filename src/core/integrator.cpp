@@ -13,9 +13,17 @@ Integrator::Integrator()
   : vRes(600), hRes(800)
 {
   // clear color buffer
+  int n = vRes*hRes;
+
+  /*
   color_buffer.resize(vRes*hRes);
   for(RGBA& p : color_buffer)
     p = RGBA(0.1f, 0.1f, 0.1f, 1.0f);
+    */
+
+  samples.insert(samples.begin(), n, RGB(0.0f,0.0f,0.0f));
+  weights.insert(weights.begin(), n, 0.0f);
+    frame.insert(  frame.begin(), n, RGBA(0.1f,0.1f,0.1f,1.0f));
 }
 
 RGBA Integrator::normal_shading(const Scene& scene,
@@ -33,11 +41,12 @@ void Integrator::render(const Scene& scene)
   for(int j = 0; j < vRes; ++j)
     for(int i = 0; i < hRes; ++i)
     {
-      RGBA sample_color(0.0f, 0.0f, 0.0f, 1.0f);
+      RGB sample(0.0f, 0.0f, 0.0f);
 
-      // coordinates of the sample in [0,1]² range
-      // (film coordinate system), flipping the v-axis (j-axis)
-      Vec2 uv( (i+0.5f)/hRes, ((vRes-1)-j+0.5f)/vRes );
+      // uniformly sample pixel (i,j) and map sample coordinates
+      // to [0,1]² with j-axis flipping (film coordinate system)
+      float e1 = (float)rand()/RAND_MAX, e2 = (float)rand()/RAND_MAX;
+      Vec2 uv( (i+e1)/hRes, ((vRes-1)-j+e2)/vRes );
 
       // get primary ray and first intersection,
       // then invoke shader to compute the sample value
@@ -45,9 +54,15 @@ void Integrator::render(const Scene& scene)
 
       Isect isect;
       if( scene.cast_ray(primary_ray, isect) )
-        sample_color = normal_shading(scene, primary_ray, isect);
+        sample = normal_shading(scene, primary_ray, isect);
 
-      // output to color buffer. TODO: sample splatting
-      color_buffer[j*hRes+i] = sample_color;
+      // sample splatting
+      int sample_add = j*hRes+i;
+      samples[sample_add] += sample;
+      weights[sample_add] += 1.0f;
     }
+
+  // reconstruct image. this is expensive as hell!
+  for(int i = 0; i < vRes*hRes; ++i)
+    frame[i] = RGBA(glm::min(RGB(1.0f), samples[i]/weights[i]), 1.0f);
 }

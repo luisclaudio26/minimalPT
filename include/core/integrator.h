@@ -19,10 +19,12 @@ public:
   // film data
   int vRes, hRes;
 
-  //TODO: lock access to color_buffer_cpu, because the
-  //GUI thread should not read from color_buffer_cpu
-  //while the rendering thread is writing samples to it
-  ColorBuffer color_buffer;
+  // the samples buffer which accumulate sample contributions,
+  // and its respective per pixel weights, which we use for filtering.
+  // frame holds the elementwise division of sample_buffer by weight.
+  RadianceBuffer samples;
+  std::vector<float> weights;
+  ColorBuffer frame;
 
   void render(const Scene& scene);
 };
