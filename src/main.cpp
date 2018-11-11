@@ -12,6 +12,12 @@ int main(int argc, char** args)
   // these spheres, which must be at roughly 2.25r for
   // this. why is this? Must test with planes after!!!
   Scene scene;
+
+  scene.cam.compute_parameters( Vec3(0.0f,0.1f,0.0f),
+                                Vec3(0.0f,1.0f,0.0f),
+                                Vec3(0.0f,0.0f,-1.0f),
+                                35.0f, 4.0/3.0f, 35.0f);
+
   scene.prims.push_back( Shape(Vec3(0.0f,-30.0f,0.0), 30.0f) );
   scene.prims.push_back( Shape(Vec3(-0.3f,0.0f,-1.0f), 0.1f) );
   scene.prims.push_back( Shape(Vec3( 0.0f,0.0f,-1.0f), 0.1f) );

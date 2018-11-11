@@ -7,6 +7,12 @@
 
 class Integrator
 {
+private:
+  RGBA direct_illumination(const Scene& scene);
+  RGBA normal_shading(const Scene& scene,
+                      const Ray& primary_ray,
+                      const Isect& isect);
+
 public:
   Integrator();
 
