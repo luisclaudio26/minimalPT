@@ -4,9 +4,9 @@
 using namespace std::chrono;
 
 /*
-high_resolution_clock::time_point tS = high_resolution_clock::now();
-high_resolution_clock::time_point tE = high_resolution_clock::now();
-duration<double> time_span = duration_cast<duration<double>>(tE - tS);
+  high_resolution_clock::time_point tS = high_resolution_clock::now();
+  high_resolution_clock::time_point tE = high_resolution_clock::now();
+  duration<double> time_span = duration_cast<duration<double>>(tE - tS);
 */
 
 Integrator::Integrator()
@@ -36,7 +36,10 @@ void Integrator::render(const Scene& scene)
       Ray primary_ray = scene.cam.get_primary_ray(uv);
       Isect isect;
       if( scene.cast_ray(primary_ray, isect) )
-        sample_color.r = 0.4f;
+      {
+        RGBA normal = RGBA(isect.normal.x, isect.normal.y, isect.normal.z, 1.0f);
+        sample_color = (normal+1.0f)*0.5f;
+      }
 
       // output to color buffer
       color_buffer[j*hRes+i] = sample_color;

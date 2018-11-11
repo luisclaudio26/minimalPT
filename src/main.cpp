@@ -6,7 +6,7 @@ int main(int argc, char** args)
 
   // "load" scene -----------
   Scene scene;
-  scene.prims.push_back( Shape(Vec3(0.0f,-2.0f,0.0f), 1.0f) );
+  scene.prims.push_back( Shape(Vec3(0.0f,0.0f,-4.0f), 1.0f) );
 
   // configure integrator and film settings ----------
   Integrator integrator;
