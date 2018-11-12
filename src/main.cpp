@@ -18,10 +18,33 @@ int main(int argc, char** args)
                                 Vec3(0.0f,0.0f,-1.0f),
                                 35.0f, 4.0/3.0f, 35.0f);
 
-  scene.prims.push_back( Shape(Vec3(0.0f,-30.0f,0.0), 30.0f) );
-  scene.prims.push_back( Shape(Vec3(-0.3f,0.0f,-1.0f), 0.1f) );
-  scene.prims.push_back( Shape(Vec3( 0.0f,0.0f,-1.0f), 0.1f) );
-  scene.prims.push_back( Shape(Vec3( 0.3f,0.0f,-1.5f), 0.1f) );
+  Shape ball_floor(Vec3(0.0f,-30.0f,0.0), 30.0f);
+  ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.prims.push_back( ball_floor );
+
+  Shape ball_red(Vec3(-0.3f,0.0f,-1.0f), 0.1f);
+  ball_red.diff_color = RGB(1.0f, 0.0f, 0.0f);
+  scene.prims.push_back( ball_red );
+
+  // Green ball will emit light.
+  // Its radius is 0.1m, so its surface is 0.04pi m².
+  // In order to emit 1 W, we need to irradiate
+  // 1/(0.04pi) W/m². Then, for an isotropic light field,
+  // radiance should be equal in all directions and integrate
+  // to 1/(0.04pi) W/m², so radiance must be
+  //
+  //    (1/(0.04pi))/2pi = 1/(0.08pi²) ~ 1.2665 W.m⁻².sr
+  //
+  // TODO: Is it worth creating some routines that automatically
+  // compute radiance for uniform, isotropic lightsources for a given power?
+  Shape ball_green(Vec3(0.0f,0.0f,-1.0f), 0.1f);
+  ball_green.diff_color = RGB(0.0f, 1.0f, 0.0f);
+  ball_green.emission = RGB(0.0f, 1.0f, 0.0f); // in W/m²sr
+  scene.prims.push_back( ball_green );
+
+  Shape ball_blue(Vec3(0.3f,0.0f,-1.5f), 0.1f);
+  ball_blue.diff_color = RGB(0.0f, 0.0f, 1.0f);
+  scene.prims.push_back( ball_blue );
 
   // configure integrator and film settings ----------
   Integrator integrator;

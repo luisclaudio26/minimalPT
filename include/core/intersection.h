@@ -12,6 +12,7 @@ class Isect
 public:
   const Shape* shape; //DO NOT DELETE THIS POINTER!!!
   float t; Vec3 normal;
+  float d2;
 
   //TODO: are t = INF intersections valid?
   bool is_valid() const { return t > 0 && t < FLT_MAX; }
