@@ -3,6 +3,7 @@
 
 #include "intersection.h"
 #include "geometry.h"
+#include "spectrum.h"
 
 class Shape
 {
@@ -15,6 +16,7 @@ public:
 
   // material will be a simple Lambertian color
   Vec3 diff_color;
+  RGB brdf(const Vec3& in, const Vec3& out) const;
 
   // Emission profile should be a radiance
   // function Le(x,d) that tells us how much power

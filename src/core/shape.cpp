@@ -7,6 +7,7 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
 
   //a = 1, because r.d is normalized
   Vec3 oc = ray.o - o;
+  float a = glm::dot(ray.d, ray.d);
   float b = 2*glm::dot(ray.d, oc);
   float c = glm::dot(oc,oc) - r*r;
   float delta = b*b-4*c;
@@ -16,8 +17,8 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
 
   // care for negative intersections, which are
   // behind the camera (and thus are invalid)
-  float t = -b-sqrt(delta)*0.5f;          // closest intersection
-  if( t < 0.0f ) t = -b+sqrt(delta)*0.5f; // if negative, check further intersection
+  float t = (-b-sqrt(delta))/(2*a);          // closest intersection
+  if( t < 0.0f ) t = (-b+sqrt(delta))/(2*a); // if negative, check further intersection
 
   // if still negative, camera is behind the ball and we should return nothing
   if( t < 0.0f) return false;
@@ -26,7 +27,7 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   // but we are not checking whether we're inside the sphere or not!
   tgt.t = t;
   tgt.d2 = glm::dot(oc, oc);
-  tgt.normal = glm::normalize(ray(t)-o);
+  tgt.normal = glm::normalize(ray(t)-this->o);
   tgt.shape = this;
 
   // compute an arbitrary tangent to the intersection point which will be
@@ -43,4 +44,9 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   tgt.bitangent = glm::cross(tgt.normal, tgt.tangent);
 
   return true;
+}
+
+RGB Shape::brdf(const Vec3& in, const Vec3& out) const
+{
+  return RGB(1.0f/(2.0f*3.141592654));
 }

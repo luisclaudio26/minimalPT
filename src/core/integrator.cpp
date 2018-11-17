@@ -73,9 +73,12 @@ RGB Integrator::direct_illumination(const Scene& scene,
   //
   // Which can be numerically estimated as:
   //
-  //                                1         L(p,-W).brdf(p,d,W) cos(W,N)
+  //                                1         De(p,-W).brdf(p,d,W) cos(W,N)
   //     L(p,d) ~ emission(p,d) +  --- . SUM -----------------------------
   //                                N     W              p(W)
+  //
+  // Where De(p,-W) is the DIRECT EMISSION of a putative emissive surface that
+  // emits light to P in direction -W.
   //
   // This is a Monte Carlo estimator with IMPORTANCE SAMPLING, thus it is more
   // general then the usual estimative for uniformly distributed samples, where
@@ -90,15 +93,45 @@ RGB Integrator::direct_illumination(const Scene& scene,
   // Obviously incoming light has many different sources, but direct illumination
   // approximates this by considering ONLY light that comes from light sources.
   // Thus.
-  glm::mat3 local2world = glm::mat3(isect.tangent, isect.normal, isect.bitangent);
+  const float _2pi = 2.0f * 3.141592654f;
+  const float over2pi = 1.0f / _2pi;
+  const int n_samples = 1;
+  const float over_n_samples = 1.0f / n_samples;
 
-  float u1 = (float)rand()/RAND_MAX;
-  float u2 = (float)rand()/RAND_MAX;
-  const float r = sqrt(1.0f - u1*u1);
-  const float phi = 2.0f * 3.1416f * u2;
+  glm::mat3 local2world = glm::mat3(isect.bitangent, isect.normal, isect.tangent);
+  RGB out(0.0f, 0.0f, 0.0f);
 
-  Vec3 v = local2world * Vec3( r*cos(phi), u1, r*sin(phi) );
-  return (v+1.0f)*0.5f;
+  for(int i = 0; i < n_samples; ++i)
+  {
+    RGB Lsample(0.0f, 0.0f, 0.0f);
+
+    // uniform sample hemisphere around Normal
+    float u1 = (float)rand()/RAND_MAX;
+    float u2 = (float)rand()/RAND_MAX;
+    const float r = sqrt(1.0f - u1*u1);
+    const float phi = 2.0f * 3.1416f * u2;
+    Vec3 w = local2world*Vec3( r*cos(phi), u1, r*sin(phi) );
+
+    // send ray in direction w and check if there's emission
+    Ray rW( primary_ray(isect.t)+0.001f*isect.normal, w );
+    Isect isectW;
+
+    if( scene.cast_ray(rW, isectW) )
+    {
+        // outgoing ray hit some surface; capture its emission
+        // (remember that a surface's emission is expressed in
+        // in W.m⁻².sr⁻¹!!!)
+        Lsample = isectW.shape->emission
+                  * glm::dot(isect.normal,w) * isect.shape->brdf(isect.normal,w);
+    }
+
+
+    // accumulate, weighting it by 1/p(w). as we're uniformly sampling
+    // the hemisphere, p(w) = 1/2pi, thus we multiply it by 2pi.
+    out += Lsample * _2pi;
+  }
+
+  return out * over_n_samples + isect.shape->emission;
 }
 
 RGBA Integrator::camera_response_curve(const RGB& irradiance) const

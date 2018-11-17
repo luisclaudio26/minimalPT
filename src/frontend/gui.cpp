@@ -50,7 +50,7 @@ void GUI::drawContents()
 {
   // update frame by requesting more samples
   static int spp_count = 0;
-  if( spp_count < 64 )
+  if( spp_count < 4096 )
   {
     integrator.render(this->scene);
     spp_count++;
