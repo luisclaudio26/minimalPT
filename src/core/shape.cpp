@@ -29,5 +29,18 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   tgt.normal = glm::normalize(ray(t)-o);
   tgt.shape = this;
 
+  // compute an arbitrary tangent to the intersection point which will be
+  // necessary for a local coordinate system.
+  // At least for our spheres, it is proven that it is not possible to compute
+  // Tangents without having singularities
+  //
+  //     https://en.wikipedia.org/wiki/Hairy_ball_theorem
+  //
+  // TODO: In this first version, our tangent will be simply the projection
+  // of the ray onto the normal. thus, this will break if a ray hits the surface
+  // perpendicular!!!
+  tgt.tangent = glm::normalize( ray.d-glm::dot(ray.d,tgt.normal)*tgt.normal );
+  tgt.bitangent = glm::cross(tgt.normal, tgt.tangent);
+
   return true;
 }

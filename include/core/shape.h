@@ -37,7 +37,7 @@ public:
   // Finally, keep in mind that integration of radiance for
   // a given point must be cosine weighted to account for
   // Lambert's cosine law.
-  Vec3 emission;
+  Vec3 emission; //in W.m⁻².sr⁻¹
 
   bool intersect(const Ray& r, Isect& tgt) const;
 };

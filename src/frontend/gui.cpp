@@ -54,9 +54,7 @@ void GUI::drawContents()
   {
     integrator.render(this->scene);
     spp_count++;
-    //std::cout<<"\rComputed "<<spp_count<<" samples per pixel"<<std::flush;
-    RGB rad = integrator.frame[300*800+400];
-    std::cout<<"\rIrradiance at pixel: "<<rad.g<<" W/m²"<<std::flush;
+    std::cout<<"\rComputed "<<spp_count<<" samples per pixel"<<std::flush;
   }
 
   //---------- displaying ----------

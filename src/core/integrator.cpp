@@ -58,6 +58,49 @@ RGB Integrator::radiance_measurement(const Scene& scene,
   return w * isect.shape->emission;
 }
 
+RGB Integrator::direct_illumination(const Scene& scene,
+                                    const Ray& primary_ray,
+                                    const Isect& isect)
+{
+  // direct illumination computes the radiance at the intersection point p and
+  // direction d = -primary_ray.d. we consider now not only the emission term (as in
+  // the radiance_measurement() shader), but also the contribution of the light
+  // arriving at the whole hemisphere and exiting in direction d (Veach's thesis,
+  // p. 85). This can be expressed as integral of the hemisphere of directions
+  // over p:
+  //
+  //        L(p,d) = emission(p,d) +  INT_H² L(p,-w).brdf(p,d,w).cos(w,N) dw
+  //
+  // Which can be numerically estimated as:
+  //
+  //                                1         L(p,-W).brdf(p,d,W) cos(W,N)
+  //     L(p,d) ~ emission(p,d) +  --- . SUM -----------------------------
+  //                                N     W              p(W)
+  //
+  // This is a Monte Carlo estimator with IMPORTANCE SAMPLING, thus it is more
+  // general then the usual estimative for uniformly distributed samples, where
+  // the 1/p(W) can be taken out of the summation as the measure of the
+  // integration domain H².
+  //
+  // Evaluating this integral as is would gives us lots of Zero contributions,
+  // as it is hard to "guess" the direction W that hits a light source. Thus,
+  // we'll choose POINTS l in the light sources and then evaluate the probability
+  // p(l) of choosing this point.
+  //
+  // Obviously incoming light has many different sources, but direct illumination
+  // approximates this by considering ONLY light that comes from light sources.
+  // Thus.
+  glm::mat3 local2world = glm::mat3(isect.tangent, isect.normal, isect.bitangent);
+
+  float u1 = (float)rand()/RAND_MAX;
+  float u2 = (float)rand()/RAND_MAX;
+  const float r = sqrt(1.0f - u1*u1);
+  const float phi = 2.0f * 3.1416f * u2;
+
+  Vec3 v = local2world * Vec3( r*cos(phi), u1, r*sin(phi) );
+  return (v+1.0f)*0.5f;
+}
+
 RGBA Integrator::camera_response_curve(const RGB& irradiance) const
 {
   float k = 1.0f;
@@ -103,7 +146,10 @@ void Integrator::render(const Scene& scene)
   //
   // Moreover, realistic films do not measure power, but actual
   // energy (which is just power integrated over time). Even more realistic
-  // films would consider dependence on wavelength (?)
+  // films would consider dependence on wavelength (?).
+  //
+  // Plenoptic camera simulation would require a film that records estimatives
+  // for RADIANCE, not irradiance, by discretizing the hemisphere of directions.
   for(int j = 0; j < vRes; ++j)
     for(int i = 0; i < hRes; ++i)
     {
@@ -120,7 +166,7 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        rad = radiance_measurement(scene, primary_ray, isect);
+        rad = direct_illumination(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
