@@ -25,7 +25,7 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   // if we reached this point, t > 0.0f and thus we have a valid intersection.
   // but we are not checking whether we're inside the sphere or not!
   tgt.t = t;
-  tgt.d2 = glm::length(oc);
+  tgt.d2 = glm::dot(oc, oc);
   tgt.normal = glm::normalize(ray(t)-o);
   tgt.shape = this;
 

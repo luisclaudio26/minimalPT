@@ -44,12 +44,18 @@ RGB Integrator::radiance_measurement(const Scene& scene,
   // of the ray, thus we do not consider the cosine-weighting which
   // would be associated with the normal of sensor surface. This will
   // be accounted for in the render() function. Here we only account
-  // for the cosine-weighting from the emiting surface.
-  const float PI4 = 12.566370614f;
-  float dist = isect.d2; // TODO: CHECK THIS
+  // for the cosine-weighting factor from the emiting surface.
+  //
+  // Despite irradiance changing with distance, radiance does not! (if we do not
+  // have a participating medium). This may be explained by the fact that a single
+  // beam of photons with the same orientation and origin (which is what radiance
+  // describes) has no reason to "disappear" while travelling through vacuum.
+  // However, if we imagine a non-colimated beam of photons irradiated from the
+  // same point, but with slightly different orientations, measuring irradiance
+  // at different distances will result in different values as the same bundle
+  // rays arrives in a greater area and thus power is more spread.
   float w = glm::dot(isect.normal, primary_ray.d);
-
-  return RGB(dist);
+  return w * isect.shape->emission;
 }
 
 RGBA Integrator::camera_response_curve(const RGB& irradiance) const
@@ -114,8 +120,7 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        //rad = radiance_measurement(scene, primary_ray, isect);
-        rad = RGB(sqrt(isect.d2));
+        rad = radiance_measurement(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
@@ -141,7 +146,6 @@ void Integrator::render(const Scene& scene)
   for(int i = 0; i < vRes*hRes; ++i)
   {
     RGB avg_irradiance = samples[i]/weights[i];
-    //frame[i] = camera_response_curve(avg_irradiance);
-    frame[i] = RGBA(avg_irradiance, 1.0f);
+    frame[i] = camera_response_curve(avg_irradiance);
   }
 }

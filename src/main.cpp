@@ -37,12 +37,12 @@ int main(int argc, char** args)
   //
   // TODO: Is it worth creating some routines that automatically
   // compute radiance for uniform, isotropic lightsources for a given power?
-  Shape ball_green(Vec3(0.0f,0.0f,-1.0f), 0.1f);
+  Shape ball_green(Vec3(0.0f,0.0f,-1.5f), 0.1f);
   ball_green.diff_color = RGB(0.0f, 1.0f, 0.0f);
   ball_green.emission = RGB(0.0f, 1.0f, 0.0f); // in W/m²sr
   scene.prims.push_back( ball_green );
 
-  Shape ball_blue(Vec3(0.3f,0.0f,-1.5f), 0.1f);
+  Shape ball_blue(Vec3(0.3f,0.0f,-1.0f), 0.1f);
   ball_blue.diff_color = RGB(0.0f, 0.0f, 1.0f);
   scene.prims.push_back( ball_blue );
 
