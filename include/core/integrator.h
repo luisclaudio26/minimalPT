@@ -16,6 +16,10 @@ private:
                                       const Ray& primary_ray,
                                       const Isect& isect);
 
+  RGB pathtracer(const Scene& scene,
+                  const Ray& primary_ray,
+                  const Isect& isect);
+
   RGB radiance_measurement(const Scene& scene,
                             const Ray& primary_ray,
                             const Isect& isect);

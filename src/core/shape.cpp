@@ -49,7 +49,8 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
 
 RGB Shape::brdf(const Vec3& in, const Vec3& out) const
 {
-  return RGB(1.0f/(2.0f*3.141592654));
+  const float k = 1.0f/(2.0f*3.141592654);
+  return k * diff_color;
 }
 
 void Shape::sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const

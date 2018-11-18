@@ -1,4 +1,5 @@
 #include "../../include/core/integrator.h"
+#include "../../include/core/sampler.h"
 #include <cstdio>
 #include <chrono>
 using namespace std::chrono;
@@ -28,6 +29,87 @@ Integrator::Integrator()
   printf("Pixel area: %f mm²\n", pixel_area);
   */
 }
+
+RGB Integrator::pathtracer(const Scene& scene,
+                            const Ray& primary_ray,
+                            const Isect& isect)
+{
+  // we want to know the radiance L exiting from p = primary_ray(isect.t) and
+  // going to the origin of primary_ray, along the direction primary_ray.d.
+  RGB path_rad(0.0f, 0.0f, 0.0f);
+
+  // the first "component" is the possible emission from p
+  // TODO: this is included in the Direct Illumination computation!
+  path_rad += isect.shape->emission;
+
+  // now we need to compute all the light arriving at p, from all directions; or,
+  // speaking in terms of surface, we want to know the contribution of each point
+  // q in the scene. For this, we need to know the radiance L(p <- q), i.e. the
+  // radiance that goes from q to p, but also we need to account for the cosine
+  // weighting of radiance, the BRDF attenuation and also express the probability
+  // p(w) of picking a direction in terms of the probability p(q) of picking that
+  // specific point.
+  int length = 2;
+
+  // TODO: pdf of primary_ray. For a pinhole camera, this is always 1 (because
+  // for a single sample on the film, there's only one ray passing through the
+  // aperture).
+  float path_pdf = 1.0f;
+  RGB throughput(1.0f);
+  Vec3 p = primary_ray(isect.t) + 0.0001f*isect.normal;
+  Isect isect_p = isect;
+  Ray o_to_p = primary_ray;
+
+  // this loop importance samples the BRDF
+  for(int i = 0; i < length-1; ++i)
+  {
+    // pick point by uniformly sampling hemisphere around p and tracing a ray
+    // from p. Remember that we are computing a integral over the whole surface
+    // of the scene, thus we could in principle simply pick random points on the
+    // scene to compute the Monte Carlo estimative, but this would result in lots
+    // of points which would be occluded and thus have zero contribution. By
+    // tracing a ray and getting the closest point, we are "guaranteed" to get a
+    // point that will contribute, and the probability in terms of solid angle
+    // of picking it will be simply the probability of picking that direction. The
+    // same probability in terms of surface area would be something related to
+    // the total area visible from p with the usual cosine weighting.
+    //
+    // If our ray doesn't hit any surface, we simply skip the loop and the last
+    // segment will have contribution zero. The last bounce will simply add the
+    // direct illumination from the last surface to the last but one and skip.
+    // TODO: last bounce uses direct_illumination routine to sample lights
+    // TODO: escaping rays must receive the contribution of environment lighting
+    // TODO: importance sample BRDF
+    Vec3 w_; float pdf_angle;
+    Sampler::sample_hemisphere(w_, pdf_angle);
+    glm::mat3 local2world(isect_p.bitangent, isect_p.normal, isect_p.tangent);
+    Vec3 w = local2world * w_;
+
+    Ray p_to_q(p, w); Isect isect_q;
+    if( !scene.cast_ray(p_to_q, isect_q) ) break;
+
+    // update throughput with BRDF * cos and path PDF
+    throughput *= isect_p.shape->brdf(w, -o_to_p.d) * glm::dot(w, isect_p.normal);
+    path_pdf *= pdf_angle;
+
+    // add contribution, weighted by throughput
+    path_rad += isect_q.shape->emission * throughput;
+
+    // update variables to recursively compute next light bounce
+    p = p_to_q(isect_q.t) + 0.0001f*isect_q.normal;
+    isect_p = isect_q;
+    o_to_p = p_to_q;
+  }
+
+  // the last iteration importance samples the lights
+  RGB di = direct_illumination_surfacearea(scene, o_to_p, isect_p);
+  path_rad += throughput * di * glm::dot(isect_p.normal, -o_to_p.d);
+
+  // TODO: path_pdf?? depends on the sampled point on the light source!
+
+  return path_rad * (1.0f / path_pdf);
+}
+
 
 RGB Integrator::normal_shading(const Scene& scene,
                                 const Ray& primary_ray,
@@ -149,7 +231,10 @@ RGB Integrator::direct_illumination_surfacearea(const Scene& scene,
     irradiance += irr_light * (1.0f/n_samples);
   }
 
-  return irradiance + isect.shape->emission;
+  // TODO: I'm taking the emission just to make sure I'm not double counting
+  // emissions in pathtracer.
+  return irradiance;
+  //return irradiance + isect.shape->emission;
 }
 
 RGB Integrator::direct_illumination_solidangle(const Scene& scene,
@@ -192,7 +277,7 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
   const int n_samples = 1;
   const float over_n_samples = 1.0f / n_samples;
 
-  glm::mat3 local2world = glm::mat3(isect.bitangent, isect.normal, isect.tangent);
+  glm::mat3 local2world(isect.bitangent, isect.normal, isect.tangent);
   RGB out(0.0f, 0.0f, 0.0f);
 
   for(int i = 0; i < n_samples; ++i)
@@ -294,7 +379,7 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        rad = direct_illumination_surfacearea(scene, primary_ray, isect);
+        rad = pathtracer(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
