@@ -230,8 +230,9 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
 
 RGBA Integrator::camera_response_curve(const RGB& irradiance) const
 {
-  float k = 1.0f;
-  return RGBA( glm::min(RGB(1.0f),k*irradiance), 1.0f);
+  const float k = 1.0f;
+  const Vec3 gamma(1.0f/2.2f);
+  return RGBA( glm::min(RGB(1.0f), glm::pow(k*irradiance,gamma) ), 1.0f);
 }
 
 void Integrator::render(const Scene& scene)
