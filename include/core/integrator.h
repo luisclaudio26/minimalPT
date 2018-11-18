@@ -8,9 +8,13 @@
 class Integrator
 {
 private:
-  RGB direct_illumination(const Scene& scene,
-                          const Ray& primary_ray,
-                          const Isect& isect);
+  RGB direct_illumination_solidangle(const Scene& scene,
+                                      const Ray& primary_ray,
+                                      const Isect& isect);
+
+  RGB direct_illumination_surfacearea(const Scene& scene,
+                                      const Ray& primary_ray,
+                                      const Isect& isect);
 
   RGB radiance_measurement(const Scene& scene,
                             const Ray& primary_ray,

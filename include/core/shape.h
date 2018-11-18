@@ -42,6 +42,7 @@ public:
   Vec3 emission; //in W.m⁻².sr⁻¹
 
   bool intersect(const Ray& r, Isect& tgt) const;
+  void sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const;
 };
 
 #endif

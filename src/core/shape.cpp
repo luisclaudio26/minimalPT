@@ -1,4 +1,5 @@
 #include "../../include/core/shape.h"
+#include <cstdio>
 
 bool Shape::intersect(const Ray& ray, Isect& tgt) const
 {
@@ -49,4 +50,20 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
 RGB Shape::brdf(const Vec3& in, const Vec3& out) const
 {
   return RGB(1.0f/(2.0f*3.141592654));
+}
+
+void Shape::sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const
+{
+  // uniformly sample point on a unitary sphere centered at the origin,
+  // then scale and translate it so it lies on the surface of this sphere
+  float u1 = (float)rand()/RAND_MAX;
+  float u2 = (float)rand()/RAND_MAX;
+  float y = 1 - 2*u1;
+  float r = sqrt(std::max(0.0f, 1.0f - y * y));
+  float phi = 2.0f*3.141592654f * u2;
+  Vec3 q(r*cos(phi), y, r*sin(phi));
+
+  normal = q;
+  point = q*this->r + this->o;
+  pdf_area = 1.0f / (4.0f * 3.141592654f * this->r * this->r);
 }

@@ -15,7 +15,10 @@ public:
   // things we we'll perform a preprocess step looking
   // for emissive things
   std::vector<Shape> prims;
+  std::vector<int> emissive_prims;
   Camera cam;
+
+  void add_primitive(const Shape& s);
 
   bool cast_ray(const Ray& r, Isect& isect) const;
   bool cast_shadow_ray(const Ray& r, float t) const;
