@@ -16,6 +16,11 @@ private:
                                       const Ray& primary_ray,
                                       const Isect& isect);
 
+  RGB camera_path(const Scene& scene,
+                  const Ray& primary_ray,
+                  const Isect& isect,
+                  int path_length = 1);
+
   RGB pathtracer(const Scene& scene,
                   const Ray& primary_ray,
                   const Isect& isect);
