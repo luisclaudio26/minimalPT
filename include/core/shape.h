@@ -17,6 +17,8 @@ public:
   // material will be a simple Lambertian color
   Vec3 diff_color;
   RGB brdf(const Vec3& in, const Vec3& out) const;
+  RGB brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
+  Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const;
 
   // Emission profile should be a radiance
   // function Le(x,d) that tells us how much power

@@ -57,7 +57,7 @@ static RGB direct_illumination_singlepoint(const Ray& primary_ray,
   // when the sampled point is in the opposite direction of the sphere) but with
   // visibility != 0.0. This is directly related to the way we compute v, as the
   // error occurs with -w_n.n always being less then 0.0001.
-  RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d) * L_qw;
+  RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d, p) * L_qw;
   pdf_solidangle = pdf_area * r2 / glm::dot(n, -w_n);
 
   return rad;
@@ -134,10 +134,14 @@ RGB Integrator::camera_path(const Scene& scene,
     // direct illumination from the last surface to the last but one and skip.
     // TODO: last bounce uses direct_illumination routine to sample lights
     // TODO: importance sample BRDF
+    /*
     Vec3 w_; float pdf_angle;
     Sampler::sample_hemisphere(w_, pdf_angle);
     glm::mat3 local2world(isect_p.bitangent, isect_p.normal, isect_p.tangent);
     Vec3 w = local2world * w_;
+    */
+    float pdf_angle;
+    Vec3 w = isect_p.shape->sample_brdf(p, -o_to_p.d, pdf_angle);
 
     // If our ray doesn't hit any surface, we simply return a sample with
     // with contribution zero.
@@ -146,7 +150,7 @@ RGB Integrator::camera_path(const Scene& scene,
     if( !scene.cast_ray(p_to_q, isect_q) ) return RGB(0.0f);
 
     // update throughput with BRDF * cos and path PDF
-    throughput *= isect_p.shape->brdf(w, -o_to_p.d) * glm::dot(w, isect_p.normal);
+    throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * glm::dot(w, isect_p.normal);
     path_pdf *= pdf_angle;
 
     // update variables to recursively compute next light bounce
@@ -158,10 +162,32 @@ RGB Integrator::camera_path(const Scene& scene,
   // the last iteration importance samples the lights
   // TODO: this is not right, as the probability of picking a given
   // path depends on the sampled point on the light surface!
+  /*
   float light_pdf;
   RGB di = direct_illumination_singlepoint(o_to_p, isect_p, scene, light_pdf);
   path_rad += throughput * di;
   path_pdf *= light_pdf;
+  */
+
+  float brdf_pdf;
+  Vec3 brdf_dir = isect_p.shape->sample_brdf(p, -o_to_p.d, brdf_pdf);
+
+  // cast ray, check whether it hits a light source
+  Ray brdf_ray(p, brdf_dir); Isect isect_brdf;
+  if( scene.cast_ray(brdf_ray, isect_brdf) )
+  {
+    path_rad += isect_brdf.shape->emission
+                  * throughput
+                  * glm::dot(isect_p.normal, brdf_dir)
+                  * isect_p.shape->brdf(brdf_dir, -o_to_p.d, p);
+    path_pdf *= brdf_pdf;
+  }
+  else
+  {
+    // TODO: environment contribution
+    path_rad = RGB(0.0f);
+    path_pdf = 1.0f;
+  }
 
   return path_rad * (1.0f / path_pdf);
 }
@@ -173,7 +199,7 @@ RGB Integrator::pathtracer(const Scene& scene,
   // TODO: russian rouletting. the it is done below is
   // underestimating the total radiance, thus the image
   // is always darker than it should
-  const int max_length = 2;
+  const int max_length = 6;
 
   RGB rad(0.0f);
   for(int i = 0; i <= max_length; ++i)
@@ -181,7 +207,6 @@ RGB Integrator::pathtracer(const Scene& scene,
 
   return rad;
 }
-
 
 RGB Integrator::normal_shading(const Scene& scene,
                                 const Ray& primary_ray,

@@ -49,8 +49,24 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
 
 RGB Shape::brdf(const Vec3& in, const Vec3& out) const
 {
-  const float k = 1.0f/(2.0f*3.141592654);
+  // TODO: why 1.0\pi? it this because integral over
+  // cosine-weighted hemisphere equals pi?
+  const float k = 1.0f/(3.141592654);
   return k * diff_color;
+}
+
+RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
+{
+  Vec3 normal = glm::normalize(p-o);
+  Vec3 reflected = glm::reflect(-in, normal);
+  return (glm::length(out-reflected) < 0.0001f) ? RGB(1.0f) : RGB(0.0f);
+}
+
+Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const
+{
+  Vec3 normal = glm::normalize(p-o);
+  pdf_solidangle = 1.0f;
+  return glm::reflect(-in, normal);
 }
 
 void Shape::sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const
