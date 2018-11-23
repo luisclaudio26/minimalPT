@@ -5,20 +5,33 @@
 #include "geometry.h"
 #include "spectrum.h"
 
+typedef enum {
+  LAMBERTIAN, DELTA
+} MaterialType;
+
 class Shape
 {
 public:
   Shape(const Vec3& o, float r)
-    : o(o), r(r), diff_color(0.0f,1.0f,0.0f), emission(0.0f) { }
+    : o(o), r(r), diff_color(0.0f,1.0f,0.0f), emission(0.0f), type(LAMBERTIAN) { }
 
   // we'll handle spheres only at first!
   Vec3 o; float r;
 
+  // compute coordinate system around an specific normal.
+  // we do this by simply taking a perpendicular vector on the plane
+  // defined by the normal and the xaxis. If they're parallel, we use
+  // the z axis. It returns a matrix that maps the local coordinate
+  // system to the world coordinate system (because the glm::mat3
+  // constructor acts column-wise, thus each column of the matrix is
+  // one of the basis vectors).
+  glm::mat3 get_local_coordinate_system(const Vec3& normal) const;
+
   // material will be a simple Lambertian color
-  Vec3 diff_color;
-  RGB brdf(const Vec3& in, const Vec3& out) const;
+  Vec3 diff_color; MaterialType type;
   RGB brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
   Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const;
+  float pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
 
   // Emission profile should be a radiance
   // function Le(x,d) that tells us how much power

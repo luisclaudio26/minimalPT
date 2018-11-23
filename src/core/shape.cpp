@@ -1,4 +1,5 @@
 #include "../../include/core/shape.h"
+#include "../../include/core/sampler.h"
 #include <cstdio>
 
 bool Shape::intersect(const Ray& ray, Isect& tgt) const
@@ -47,26 +48,86 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   return true;
 }
 
-RGB Shape::brdf(const Vec3& in, const Vec3& out) const
-{
-  // TODO: why 1.0\pi? it this because integral over
-  // cosine-weighted hemisphere equals pi?
-  const float k = 1.0f/(3.141592654);
-  return k * diff_color;
-}
-
 RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
 {
-  Vec3 normal = glm::normalize(p-o);
-  Vec3 reflected = glm::reflect(-in, normal);
-  return (glm::length(out-reflected) < 0.0001f) ? RGB(1.0f) : RGB(0.0f);
+  switch(type)
+  {
+    case DELTA:
+    {
+      Vec3 normal = glm::normalize(p-o);
+      Vec3 reflected = glm::reflect(-in, normal);
+      return glm::length(out-reflected) < 0.0001f ? RGB(1.0f) : RGB(0.0f);
+    };
+
+    default:
+    case LAMBERTIAN:
+    {
+      // TODO: why 1.0\pi? is it because integral over
+      // cosine-weighted hemisphere equals pi?
+      const float k = 1.0f/(3.141592654);
+      return k * diff_color;
+    }
+  };
 }
 
 Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const
 {
+  // normal is needed for all materials
   Vec3 normal = glm::normalize(p-o);
-  pdf_solidangle = 1.0f;
-  return glm::reflect(-in, normal);
+
+  // select BRDF behavior
+  switch(type)
+  {
+    case DELTA:
+    {
+      pdf_solidangle = 1.0f;
+      return glm::reflect(-in, normal);
+    };
+    default:
+    case LAMBERTIAN:
+    {
+      // TODO: how to obtain local coordinate system??
+      Vec3 w_;
+      Sampler::sample_hemisphere(w_, pdf_solidangle);
+      glm::mat3 local2world = get_local_coordinate_system(normal);
+      return local2world * w_;
+    };
+  }
+}
+
+float Shape::pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
+{
+  switch(type)
+  {
+    case DELTA:
+    {
+      Vec3 normal = glm::normalize(p-o);
+      Vec3 reflected = glm::reflect(-in, normal);
+      return glm::length(out-reflected) < 0.0001f ? 1.0f : 0.0f;
+    }
+    default:
+    case LAMBERTIAN:
+    {
+      // TODO: check this. if we uniformly sample the hemisphere I think
+      // this is correct, but if we cosine-weight it this might be wrong
+      return _over2pi;
+    }
+  }
+}
+
+glm::mat3 Shape::get_local_coordinate_system(const Vec3& normal) const
+{
+  // get vector perpendicular to the normal and contained on the plane
+  // defined by the normal and the x axis.
+  // TODO: Problems occur if normal = axis!
+  Vec3 axis(1.0f, 0.0f, 0.0f);
+  float NdotA = glm::dot(axis, normal);
+
+  Vec3 tangent = glm::normalize(axis - NdotA * normal);
+  Vec3 bitangent = glm::cross(normal, tangent);
+
+  // TODO: check this
+  return glm::mat3(bitangent, normal, tangent);
 }
 
 void Shape::sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const

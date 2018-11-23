@@ -24,6 +24,7 @@ int main(int argc, char** args)
 
   Shape ball_red(Vec3(-0.3f,0.1f,-1.0f), 0.1f);
   ball_red.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  ball_red.type = DELTA;
   //scene.prims.push_back( ball_red );
   scene.add_primitive( ball_red );
 

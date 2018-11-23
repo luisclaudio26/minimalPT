@@ -319,7 +319,7 @@ RGB Integrator::direct_illumination_surfacearea(const Scene& scene,
       float v = glm::length(shadow_ray(isect_shadow.t)-q) < 0.0001f ? 1.0f : 0.0f;
 
       // accumulate f(x)/p(x)
-      RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d) * L_qw;
+      RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d, p) * L_qw;
       float pdf_angle = pdf_area * r2 / glm::dot(n, -w_n);
       irr_light += rad * (1.0f/pdf_angle);
     }
@@ -373,7 +373,8 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
   const int n_samples = 1;
   const float over_n_samples = 1.0f / n_samples;
 
-  glm::mat3 local2world(isect.bitangent, isect.normal, isect.tangent);
+  //glm::mat3 local2world(isect.bitangent, isect.normal, isect.tangent);
+  glm::mat3 local2world = isect.shape->get_local_coordinate_system(isect.normal);
   RGB out(0.0f, 0.0f, 0.0f);
 
   for(int i = 0; i < n_samples; ++i)
@@ -388,7 +389,8 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
     Vec3 w = local2world*Vec3( r*cos(phi), u1, r*sin(phi) );
 
     // send ray in direction w and check if there's emission
-    Ray rW( primary_ray(isect.t)+0.001f*isect.normal, w );
+    Vec3 o = primary_ray(isect.t)+0.001f*isect.normal;
+    Ray rW(o, w);
     Isect isectW;
 
     if( scene.cast_ray(rW, isectW) )
@@ -397,7 +399,8 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
         // (remember that a surface's emission is expressed in
         // in W.m⁻².sr⁻¹!!!)
         Lsample = isectW.shape->emission
-                  * glm::dot(isect.normal,w) * isect.shape->brdf(isect.normal,w);
+                  * glm::dot(isect.normal,w)
+                  * isect.shape->brdf(isect.normal, w, o);
     }
 
 
@@ -476,6 +479,8 @@ void Integrator::render(const Scene& scene)
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
         rad = pathtracer(scene, primary_ray, isect);
+        //rad = direct_illumination_solidangle(scene, primary_ray, isect);
+        //rad = direct_illumination_surfacearea(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
