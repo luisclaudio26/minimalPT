@@ -130,16 +130,8 @@ RGB Integrator::camera_path(const Scene& scene,
     // same probability in terms of surface area would be something related to
     // the total area visible from p with the usual cosine weighting.
     //
-    // The last bounce will simply add the
-    // direct illumination from the last surface to the last but one and skip.
-    // TODO: last bounce uses direct_illumination routine to sample lights
-    // TODO: importance sample BRDF
-    /*
-    Vec3 w_; float pdf_angle;
-    Sampler::sample_hemisphere(w_, pdf_angle);
-    glm::mat3 local2world(isect_p.bitangent, isect_p.normal, isect_p.tangent);
-    Vec3 w = local2world * w_;
-    */
+    // The last bounce will simply add the direct illumination from the last
+    // surface to the last but one and skip.
     float pdf_angle;
     Vec3 w = isect_p.shape->sample_brdf(p, -o_to_p.d, pdf_angle);
 
@@ -161,7 +153,8 @@ RGB Integrator::camera_path(const Scene& scene,
 
   // the last iteration importance samples the lights
   // TODO: this is not right, as the probability of picking a given
-  // path depends on the sampled point on the light surface!
+  // path depends on the sampled point on the light surface! -> review this
+  // TODO: MULTIPLE IMPORTANCE SAMPLING!
   /*
   float light_pdf;
   RGB di = direct_illumination_singlepoint(o_to_p, isect_p, scene, light_pdf);
@@ -189,6 +182,7 @@ RGB Integrator::camera_path(const Scene& scene,
     path_pdf = 1.0f;
   }
 
+  // final contribution of this radiance path
   return path_rad * (1.0f / path_pdf);
 }
 
