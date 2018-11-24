@@ -13,10 +13,10 @@ using namespace std::chrono;
 // --------------------------------------------------------------------
 // ------------------ Pathtracing helper functions --------------------
 // --------------------------------------------------------------------
-static RGB direct_illumination_singlepoint(const Ray& primary_ray,
-                                            const Isect& isect,
-                                            const Scene& scene,
-                                            float& pdf_solidangle)
+static RGB sample_light(const Ray& primary_ray,
+                          const Isect& isect,
+                          const Scene& scene,
+                          float& pdf_solidangle)
 {
   Vec3 p(primary_ray(isect.t));
   Vec3 d = -primary_ray.d;
@@ -61,6 +61,31 @@ static RGB direct_illumination_singlepoint(const Ray& primary_ray,
   pdf_solidangle = pdf_area * r2 / glm::dot(n, -w_n);
 
   return rad;
+}
+
+static RGB sample_brdf(const Ray& primary_ray,
+                        const Isect& isect,
+                        const Scene& scene,
+                        float& pdf_solidangle)
+{
+  RGB rad_out(0.0f);
+
+  // intersection point
+  Vec3 p(primary_ray(isect.t) + 0.0001f*isect.normal);
+
+  // sample BRDF direction
+  Vec3 brdf_dir = isect.shape->sample_brdf(p, -primary_ray.d, pdf_solidangle);
+
+  // cast ray, check whether it hits a light source
+  Ray brdf_ray(p, brdf_dir); Isect isect_brdf;
+  if( scene.cast_ray(brdf_ray, isect_brdf) )
+    rad_out = isect_brdf.shape->emission
+                * isect.shape->brdf(brdf_dir, -primary_ray.d, p)
+                * glm::dot(isect.normal, brdf_dir); //QUESTION: wouldn't it be necessary to consider the cosine term of the radiance going out?
+  else
+    rad_out = RGB(0.0f); // TODO: environment contribution
+
+  return rad_out;
 }
 
 // --------------------------------------------------------------------
@@ -154,36 +179,24 @@ RGB Integrator::camera_path(const Scene& scene,
   // the last iteration importance samples the lights
   // TODO: this is not right, as the probability of picking a given
   // path depends on the sampled point on the light surface! -> review this
-  // TODO: MULTIPLE IMPORTANCE SAMPLING!
-  /*
   float light_pdf;
-  RGB di = direct_illumination_singlepoint(o_to_p, isect_p, scene, light_pdf);
-  path_rad += throughput * di;
-  path_pdf *= light_pdf;
-  */
+  RGB di_ls = sample_light(o_to_p, isect_p, scene, light_pdf);
+  RGB rad_ls = di_ls*throughput;
+  float pdf_ls = path_pdf*light_pdf;
 
   float brdf_pdf;
-  Vec3 brdf_dir = isect_p.shape->sample_brdf(p, -o_to_p.d, brdf_pdf);
+  RGB di_brdf = sample_brdf(o_to_p, isect_p, scene, brdf_pdf);
+  RGB rad_brdf = di_brdf*throughput;
+  float pdf_brdf = path_pdf * brdf_pdf;
 
-  // cast ray, check whether it hits a light source
-  Ray brdf_ray(p, brdf_dir); Isect isect_brdf;
-  if( scene.cast_ray(brdf_ray, isect_brdf) )
-  {
-    path_rad += isect_brdf.shape->emission
-                  * throughput
-                  * glm::dot(isect_p.normal, brdf_dir)
-                  * isect_p.shape->brdf(brdf_dir, -o_to_p.d, p);
-    path_pdf *= brdf_pdf;
-  }
-  else
-  {
-    // TODO: environment contribution
-    path_rad = RGB(0.0f);
-    path_pdf = 1.0f;
-  }
+  float over_sum_pdfs = 1.0f / ( pdf_ls*pdf_ls + pdf_brdf*pdf_brdf );
+  float w_light = (pdf_ls*pdf_ls) * over_sum_pdfs;
+  float w_brdf = (pdf_brdf*pdf_brdf) * over_sum_pdfs;
+
+  path_rad = rad_ls*w_light/pdf_ls + rad_brdf*w_brdf/pdf_brdf;
 
   // final contribution of this radiance path
-  return path_rad * (1.0f / path_pdf);
+  return path_rad;
 }
 
 RGB Integrator::pathtracer(const Scene& scene,
