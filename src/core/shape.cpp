@@ -62,8 +62,8 @@ RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
     default:
     case LAMBERTIAN:
     {
-      // TODO: why 1.0\pi? is it because integral over
-      // cosine-weighted hemisphere equals pi?
+      // 1/pi because the reflectance integral is cosine-weighted, and the integral
+      // of a cosine-weighted hemisphere is pi
       const float k = 1.0f/(3.141592654);
       return k * diff_color;
     }
@@ -86,9 +86,9 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) co
     default:
     case LAMBERTIAN:
     {
-      // TODO: how to obtain local coordinate system??
       Vec3 w_;
-      Sampler::sample_hemisphere(w_, pdf_solidangle);
+      //Sampler::sample_hemisphere(w_, pdf_solidangle);
+      Sampler::cosine_weight_sample_hemisphere(w_, pdf_solidangle);
       glm::mat3 local2world = get_local_coordinate_system(normal);
       return local2world * w_;
     };
@@ -110,7 +110,8 @@ float Shape::pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
     {
       // TODO: check this. if we uniformly sample the hemisphere I think
       // this is correct, but if we cosine-weight it this might be wrong
-      return _over2pi;
+      //return _over2pi;
+      return _overpi;
     }
   }
 }

@@ -176,27 +176,29 @@ RGB Integrator::camera_path(const Scene& scene,
     o_to_p = p_to_q;
   }
 
-  // the last iteration importance samples the lights
-  // TODO: this is not right, as the probability of picking a given
-  // path depends on the sampled point on the light surface! -> review this
+  // the last iteration importance samples direct lighting by combining
+  // BRDF sampling and light sampling using multiple importance sampling.
+  // sample light sources
   float light_pdf;
   RGB di_ls = sample_light(o_to_p, isect_p, scene, light_pdf);
   RGB rad_ls = di_ls*throughput;
   float pdf_ls = path_pdf*light_pdf;
 
+  // sample BRDF
+  // QUESTION: specular highlight looks a bit darker than it should when
+  // using multiple importance sampling; why?
   float brdf_pdf;
   RGB di_brdf = sample_brdf(o_to_p, isect_p, scene, brdf_pdf);
   RGB rad_brdf = di_brdf*throughput;
   float pdf_brdf = path_pdf * brdf_pdf;
 
-  float over_sum_pdfs = 1.0f / ( pdf_ls*pdf_ls + pdf_brdf*pdf_brdf );
-  float w_light = (pdf_ls*pdf_ls) * over_sum_pdfs;
-  float w_brdf = (pdf_brdf*pdf_brdf) * over_sum_pdfs;
-
-  path_rad = rad_ls*w_light/pdf_ls + rad_brdf*w_brdf/pdf_brdf;
+  // Power heuristic for multiple importance sampling
+  float over_sum_pdfs = 1.0f / (pdf_ls*pdf_ls + pdf_brdf*pdf_brdf);
+  float w_light = pdf_ls*pdf_ls * over_sum_pdfs;
+  float w_brdf = pdf_brdf*pdf_brdf * over_sum_pdfs;
 
   // final contribution of this radiance path
-  return path_rad;
+  return rad_ls*w_light/pdf_ls + rad_brdf*w_brdf/pdf_brdf;
 }
 
 RGB Integrator::pathtracer(const Scene& scene,

@@ -26,3 +26,25 @@ void Sampler::sample_sphere(Vec3& out, float& pdf)
   out = Vec3(r*cos(phi), y, r*sin(phi));
   pdf = _over4pi;
 }
+
+void Sampler::uniform_sample_disk(Vec2& out, float& pdf)
+{
+  float u1 = (float)rand()/RAND_MAX;
+  float u2 = (float)rand()/RAND_MAX;
+
+  float r = sqrt(u1);
+  float theta = _2pi * u2;
+
+  out = Vec2(r*cos(theta), r*sin(theta));
+  pdf = _overpi;
+}
+
+void Sampler::cosine_weight_sample_hemisphere(Vec3& out, float& pdf)
+{
+  Vec2 d; float pdf_disk;
+  uniform_sample_disk(d, pdf_disk);
+  float z = sqrt(std::max(0.0f, 1.0f-d.x*d.x-d.y*d.y));
+
+  out = Vec3(d.x, z, d.y);
+  pdf = z; // This is the dot product of OUT with the normal [0 1 0]
+}
