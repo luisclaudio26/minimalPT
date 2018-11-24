@@ -6,14 +6,14 @@
 #include "spectrum.h"
 
 typedef enum {
-  LAMBERTIAN, DELTA
+  LAMBERTIAN, DELTA, GLASS
 } MaterialType;
 
 class Shape
 {
 public:
   Shape(const Vec3& o, float r)
-    : o(o), r(r), diff_color(0.0f,1.0f,0.0f), emission(0.0f), type(LAMBERTIAN) { }
+    : o(o), r(r), diff_color(0.0f,1.0f,0.0f), emission(0.0f), type(LAMBERTIAN), eta(1.0f) { }
 
   // we'll handle spheres only at first!
   Vec3 o; float r;
@@ -28,9 +28,9 @@ public:
   glm::mat3 get_local_coordinate_system(const Vec3& normal) const;
 
   // material will be a simple Lambertian color
-  Vec3 diff_color; MaterialType type;
+  Vec3 diff_color; MaterialType type; float eta;
   RGB brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
-  Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const;
+  Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bool inner_surface = false) const;
   float pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
 
   // Emission profile should be a radiance

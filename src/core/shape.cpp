@@ -22,15 +22,20 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   float t = (-b-sqrt(delta))/(2*a);          // closest intersection
   if( t < 0.0f ) t = (-b+sqrt(delta))/(2*a); // if negative, check further intersection
 
-  // if still negative, camera is behind the ball and we should return nothing
-  if( t < 0.0f) return false;
+  // if still negative, the ball is behind the camera and we should return nothing.
+  if(t < 0.0f) return false;
 
   // if we reached this point, t > 0.0f and thus we have a valid intersection.
   // but we are not checking whether we're inside the sphere or not!
   tgt.t = t;
   tgt.d2 = glm::dot(oc, oc);
-  tgt.normal = glm::normalize(ray(t)-this->o);
   tgt.shape = this;
+  tgt.normal = glm::normalize(ray(t)-this->o);
+
+  // flip normals if the origin of the ray is inside the sphere:
+  // ||oc|| < r  =>  <oc,oc> < r²  =>  <oc,oc> - r² < 0   =>   c < 0
+  bool inside_sphere = c < 0.0f;
+  if( inside_sphere ) tgt.normal = -tgt.normal;
 
   // compute an arbitrary tangent to the intersection point which will be
   // necessary for a local coordinate system.
@@ -52,6 +57,13 @@ RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
 {
   switch(type)
   {
+    case GLASS:
+    {
+      Vec3 normal = glm::normalize(p-o);
+      Vec3 refracted = glm::refract(-in, normal, eta);
+      return glm::length(out-refracted) < 0.0001f ? RGB(1.0f) : RGB(0.0f);
+    };
+
     case DELTA:
     {
       Vec3 normal = glm::normalize(p-o);
@@ -70,19 +82,33 @@ RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
   };
 }
 
-Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const
+Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bool inner_surface) const
 {
   // normal is needed for all materials
+  // QUESTION: how to flip normals in the case of sampling a BTDF
+  // in the inner surface of the sphere and we need to send rays to the
+  // outter one? Also we need this to invert the eta value
   Vec3 normal = glm::normalize(p-o);
+  if( inner_surface )
+  {
+    normal = -normal;
+  }
 
   // select BRDF behavior
   switch(type)
   {
+    case GLASS:
+    {
+      pdf_solidangle = 1.0f;
+      return glm::refract(-in, normal, eta);
+    }
+
     case DELTA:
     {
       pdf_solidangle = 1.0f;
       return glm::reflect(-in, normal);
-    };
+    }
+
     default:
     case LAMBERTIAN:
     {
@@ -99,6 +125,14 @@ float Shape::pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
 {
   switch(type)
   {
+    case GLASS:
+    {
+      Vec3 normal = glm::normalize(p-o);
+      Vec3 refracted = glm::refract(-in, normal, eta);
+      //Vec3 refracted = -normal;
+      return glm::length(out-refracted) < 0.0001f ? 1.0f : 0.0f;
+    }
+
     case DELTA:
     {
       Vec3 normal = glm::normalize(p-o);

@@ -33,6 +33,10 @@ private:
                       const Ray& primary_ray,
                       const Isect& isect);
 
+  RGB refraction_analyser(const Scene& scene,
+                          const Ray& primary_ray,
+                          const Isect& isect);
+
   // maps a given irradiance measurement to a pixel output.
   // Ideally we should convert ENERGY measurements (irradiance
   // integrated over the pixel surface, integrated over time),

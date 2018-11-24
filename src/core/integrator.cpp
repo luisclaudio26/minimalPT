@@ -138,6 +138,7 @@ RGB Integrator::camera_path(const Scene& scene,
   float path_pdf = 1.0f;
   RGB throughput(1.0f);
   Vec3 p = primary_ray(isect.t) + 0.0001f*isect.normal;
+  //Vec3 p = primary_ray(isect.t) + isect.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   Isect isect_p = isect;
   Ray o_to_p = primary_ray;
 
@@ -172,6 +173,7 @@ RGB Integrator::camera_path(const Scene& scene,
 
     // update variables to recursively compute next light bounce
     p = p_to_q(isect_q.t) + 0.0001f*isect_q.normal;
+    //p = p_to_q(isect_q.t) + isect_q.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
     isect_p = isect_q;
     o_to_p = p_to_q;
   }
@@ -223,6 +225,25 @@ RGB Integrator::normal_shading(const Scene& scene,
 {
   return (isect.normal+1.0f)*0.5f;
 }
+
+RGB Integrator::refraction_analyser(const Scene& scene,
+                                    const Ray& primary_ray,
+                                    const Isect& isect)
+{
+  // cast secondary ray according to BRDF, accumulate hit distance
+  Vec3 p = primary_ray(isect.t) + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+  float pdf;
+  Vec3 w = isect.shape->sample_brdf(p, -primary_ray.d, pdf);
+
+  /*
+  Isect isect_w; Ray ray(p, w);
+  if( scene.cast_ray(ray, isect_w) ) return RGB(isect_w.t);
+  else return RGB(1.0f, 0.0f, 0.0f);
+*/
+
+  return w;
+}
+
 
 RGB Integrator::radiance_measurement(const Scene& scene,
                                       const Ray& primary_ray,
@@ -445,7 +466,8 @@ void Integrator::render(const Scene& scene)
   //
   // Notice that there's a subtlety here: to compute irradiance
   // at a given point, we need to integrate radiance over
-  // the hemisphere of directions, weighting by the cosine (Lambert's
+  // the hemisphere of directions, weighting   //return (isect.normal + 1.0f)*0.5f;
+  //return isect.normal;by the cosine (Lambert's
   // cosine law). A realistic camera model would do this by sampling
   // many different directions for the same point, and each one of these
   // directions would generate a ray that passes through the lens and goes
@@ -487,9 +509,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        rad = pathtracer(scene, primary_ray, isect);
-        //rad = direct_illumination_solidangle(scene, primary_ray, isect);
-        //rad = direct_illumination_surfacearea(scene, primary_ray, isect);
+        rad = refraction_analyser(scene, primary_ray, isect);
+        //rad = pathtracer(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
