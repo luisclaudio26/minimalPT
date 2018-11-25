@@ -71,7 +71,7 @@ static RGB sample_brdf(const Ray& primary_ray,
   RGB rad_out(0.0f);
 
   // intersection point
-  Vec3 p(primary_ray(isect.t) + 0.0001f*isect.normal);
+  Vec3 p(primary_ray(isect.t) + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f));
 
   // sample BRDF direction
   Vec3 brdf_dir = isect.shape->sample_brdf(p, -primary_ray.d, pdf_solidangle);
@@ -79,9 +79,17 @@ static RGB sample_brdf(const Ray& primary_ray,
   // cast ray, check whether it hits a light source
   Ray brdf_ray(p, brdf_dir); Isect isect_brdf;
   if( scene.cast_ray(brdf_ray, isect_brdf) )
+  {
+    float cosNW = glm::dot(isect.normal, brdf_dir);
+    if(isect.shape->type == GLASS) cosNW *= -1.0f;
+
     rad_out = isect_brdf.shape->emission
                 * isect.shape->brdf(brdf_dir, -primary_ray.d, p)
-                * glm::dot(isect.normal, brdf_dir); //QUESTION: wouldn't it be necessary to consider the cosine term of the radiance going out?
+                * cosNW;
+                //* glm::dot(isect.normal, brdf_dir); //QUESTION: wouldn't it be necessary to consider the cosine term of the radiance going out?
+
+      //TODO: TAKE CARE OF NEGATIVE DOT(NORMAL,DIR) TERMS!!
+  }
   else
     rad_out = RGB(0.0f); // TODO: environment contribution
 
@@ -137,8 +145,8 @@ RGB Integrator::camera_path(const Scene& scene,
   // aperture).
   float path_pdf = 1.0f;
   RGB throughput(1.0f);
-  Vec3 p = primary_ray(isect.t) + 0.0001f*isect.normal;
-  //Vec3 p = primary_ray(isect.t) + isect.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+  //Vec3 p = primary_ray(isect.t) + 0.0001f*isect.normal;
+  Vec3 p = primary_ray(isect.t) + isect.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   Isect isect_p = isect;
   Ray o_to_p = primary_ray;
 
@@ -168,12 +176,16 @@ RGB Integrator::camera_path(const Scene& scene,
     if( !scene.cast_ray(p_to_q, isect_q) ) return RGB(0.0f);
 
     // update throughput with BRDF * cos and path PDF
-    throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * glm::dot(w, isect_p.normal);
+    float cosNW = glm::dot(isect.normal, w);
+    if(isect.shape->type == GLASS) cosNW *= -1.0f;
+
+    //throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * glm::dot(w, isect_p.normal);
+    throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * cosNW;
     path_pdf *= pdf_angle;
 
     // update variables to recursively compute next light bounce
-    p = p_to_q(isect_q.t) + 0.0001f*isect_q.normal;
-    //p = p_to_q(isect_q.t) + isect_q.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+    //p = p_to_q(isect_q.t) + 0.0001f*isect_q.normal;
+    p = p_to_q(isect_q.t) + isect_q.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
     isect_p = isect_q;
     o_to_p = p_to_q;
   }
@@ -210,7 +222,7 @@ RGB Integrator::pathtracer(const Scene& scene,
   // TODO: russian rouletting. the it is done below is
   // underestimating the total radiance, thus the image
   // is always darker than it should
-  const int max_length = 6;
+  const int max_length = 9;
 
   RGB rad(0.0f);
   for(int i = 0; i <= max_length; ++i)
@@ -509,8 +521,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        rad = refraction_analyser(scene, primary_ray, isect);
-        //rad = pathtracer(scene, primary_ray, isect);
+        //rad = refraction_analyser(scene, primary_ray, isect);
+        rad = pathtracer(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.

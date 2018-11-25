@@ -60,7 +60,9 @@ RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
     case GLASS:
     {
       Vec3 normal = glm::normalize(p-o);
-      Vec3 refracted = glm::refract(-in, normal, eta);
+      bool outer_surface = glm::dot(in, normal) > 0.0f;
+      Vec3 refracted = outer_surface ? glm::refract(-in,normal, eta) : glm::refract(-in,-normal,1.0f/eta);
+
       return glm::length(out-refracted) < 0.0001f ? RGB(1.0f) : RGB(0.0f);
     };
 
@@ -89,10 +91,6 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bo
   // in the inner surface of the sphere and we need to send rays to the
   // outter one? Also we need this to invert the eta value
   Vec3 normal = glm::normalize(p-o);
-  if( inner_surface )
-  {
-    normal = -normal;
-  }
 
   // select BRDF behavior
   switch(type)
@@ -100,7 +98,14 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bo
     case GLASS:
     {
       pdf_solidangle = 1.0f;
-      return glm::refract(-in, normal, eta);
+
+      // if IN is pointing in the same direction of the normal, this
+      // means that intersection is occuring in the outer surface (remember
+      // that our BRDF setting flips the incoming direction). Thus, if IN
+      // points to the opposite side, this means that intersetion is ocurring
+      // in the inner surface
+      bool outer_surface = glm::dot(in, normal) > 0.0f;
+      return outer_surface ? glm::refract(-in,normal, eta) : glm::refract(-in,-normal,1.0f/eta);
     }
 
     case DELTA:

@@ -45,11 +45,11 @@ int main(int argc, char** args)
   ball_blue.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive( ball_blue );
 
-  //Shape ball_glass(Vec3(0.0f,0.1f,-0.5f), 0.1f);
-  Shape ball_glass(Vec3(0.0f,0.1f,0.0f), 1.0f);
+  Shape ball_glass(Vec3(0.0f,0.1f,-0.5f), 0.1f);
+  //Shape ball_glass(Vec3(0.0f,0.1f,0.0f), 1.0f);
   ball_glass.diff_color = RGB(1.0f, 1.0f, 1.0f);
   ball_glass.type = GLASS;
-  ball_glass.eta = 0.5f;
+  ball_glass.eta = 0.8f;
   scene.add_primitive(ball_glass);
 
   // configure integrator and film settings ----------
