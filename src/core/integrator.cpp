@@ -176,10 +176,26 @@ RGB Integrator::camera_path(const Scene& scene,
     if( !scene.cast_ray(p_to_q, isect_q) ) return RGB(0.0f);
 
     // update throughput with BRDF * cos and path PDF
+    // OLD: throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * glm::dot(w, isect_p.normal);
+    //
+    // QUESTION:
+    // This hotfix kinda solves the problem of refraction, although (1) I'm not sure
+    // of the physical meaning of this cosine term for refraction - although PBR includes
+    // it, (2) still there's a problem with the LIGHT SOURCE image seen on the glass
+    // sphere (it is getting the diffuse color of the emissive primitive),
+    // (3) the mirror ball is not correctly reflected, we do not see the reflex on
+    // the refracted image and (4) there's no sign of caustic paths.
+    //
+    // Probably there's some issue with direct illumination for paths inside the
+    // sphere.
+    //
+    // Observations:
+    //  - Problem (2) happens only for paths of length 4. Groundtruth reveals that
+    //    with 1 bounce only it should be possible to create the light source highlight,
+    //    as with one bounce only we can reach the other side of the sphere and compute
+    //    the direct illumination contribution.
     float cosNW = glm::dot(isect.normal, w);
     if(isect.shape->type == GLASS) cosNW *= -1.0f;
-
-    //throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * glm::dot(w, isect_p.normal);
     throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * cosNW;
     path_pdf *= pdf_angle;
 
@@ -222,11 +238,11 @@ RGB Integrator::pathtracer(const Scene& scene,
   // TODO: russian rouletting. the it is done below is
   // underestimating the total radiance, thus the image
   // is always darker than it should
-  const int max_length = 9;
+  //const int max_length = 3;
 
   RGB rad(0.0f);
-  for(int i = 0; i <= max_length; ++i)
-    rad += camera_path(scene, primary_ray, isect, i);
+  //for(int i = 0; i <= max_length; ++i) rad += camera_path(scene, primary_ray, isect, i);
+  rad = camera_path(scene, primary_ray, isect, 4);
 
   return rad;
 }
