@@ -55,20 +55,19 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
 
 RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
 {
+  Vec3 normal = glm::normalize(p-o);
+
   switch(type)
   {
     case GLASS:
     {
-      Vec3 normal = glm::normalize(p-o);
       bool outer_surface = glm::dot(in, normal) > 0.0f;
-      Vec3 refracted = outer_surface ? glm::refract(-in,normal, eta) : glm::refract(-in,-normal,1.0f/eta);
-
+      Vec3 refracted = outer_surface ? glm::refract(-in,normal,eta) : glm::refract(-in,-normal,1.0f/eta);
       return glm::length(out-refracted) < 0.0001f ? RGB(1.0f) : RGB(0.0f);
     };
 
     case DELTA:
     {
-      Vec3 normal = glm::normalize(p-o);
       Vec3 reflected = glm::reflect(-in, normal);
       return glm::length(out-reflected) < 0.0001f ? RGB(1.0f) : RGB(0.0f);
     };
@@ -105,7 +104,7 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bo
       // points to the opposite side, this means that intersetion is ocurring
       // in the inner surface
       bool outer_surface = glm::dot(in, normal) > 0.0f;
-      return outer_surface ? glm::refract(-in,normal, eta) : glm::refract(-in,-normal,1.0f/eta);
+      return outer_surface ? glm::refract(-in,normal,eta) : glm::refract(-in,-normal,1.0f/eta);
     }
 
     case DELTA:
@@ -118,7 +117,6 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bo
     case LAMBERTIAN:
     {
       Vec3 w_;
-      //Sampler::sample_hemisphere(w_, pdf_solidangle);
       Sampler::cosine_weight_sample_hemisphere(w_, pdf_solidangle);
       glm::mat3 local2world = get_local_coordinate_system(normal);
       return local2world * w_;
@@ -128,19 +126,20 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bo
 
 float Shape::pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
 {
+  // needed for all materials
+  Vec3 normal = glm::normalize(p-o);
+
   switch(type)
   {
     case GLASS:
     {
-      Vec3 normal = glm::normalize(p-o);
-      Vec3 refracted = glm::refract(-in, normal, eta);
-      //Vec3 refracted = -normal;
+      bool outer_surface = glm::dot(in, normal) > 0.0f;
+      Vec3 refracted = outer_surface ? glm::refract(-in,normal, eta) : glm::refract(-in,-normal,1.0f/eta);
       return glm::length(out-refracted) < 0.0001f ? 1.0f : 0.0f;
     }
 
     case DELTA:
     {
-      Vec3 normal = glm::normalize(p-o);
       Vec3 reflected = glm::reflect(-in, normal);
       return glm::length(out-reflected) < 0.0001f ? 1.0f : 0.0f;
     }
