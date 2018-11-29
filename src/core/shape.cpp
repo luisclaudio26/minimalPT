@@ -118,6 +118,7 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bo
     {
       Vec3 w_;
       Sampler::cosine_weight_sample_hemisphere(w_, pdf_solidangle);
+      //Sampler::sample_hemisphere(w_, pdf_solidangle);
       glm::mat3 local2world = get_local_coordinate_system(normal);
       return local2world * w_;
     };
@@ -148,8 +149,8 @@ float Shape::pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
     {
       // TODO: check this. if we uniformly sample the hemisphere I think
       // this is correct, but if we cosine-weight it this might be wrong
-      //return _over2pi;
-      return _overpi;
+      return _over2pi;
+      return glm::dot(out, normal) * _overpi;
     }
   }
 }

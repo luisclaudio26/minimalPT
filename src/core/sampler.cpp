@@ -46,5 +46,5 @@ void Sampler::cosine_weight_sample_hemisphere(Vec3& out, float& pdf)
   float z = sqrt(std::max(0.0f, 1.0f-d.x*d.x-d.y*d.y));
 
   out = Vec3(d.x, z, d.y);
-  pdf = z; // This is the dot product of OUT with the normal [0 1 0]
+  pdf = z * _overpi; // This is the dot product of OUT with the normal [0 1 0]
 }
