@@ -1,4 +1,5 @@
 #include "../../include/core/camera.h"
+#include "../../include/core/sampler.h"
 
 void Camera::compute_parameters(const Vec3& origin,
                                 const Vec3& up,
@@ -23,8 +24,10 @@ void Camera::compute_parameters(const Vec3& origin,
   // even though things are in millimeters, the ratios cancel
   // out the units, so we should have no problems.
   fh = fw/ar;
-  film_bl = glm::normalize( Vec3(-fw/2, -fh/2, -fd) );
-  film_ur = glm::normalize( Vec3( fw/2,  fh/2, -fd) );
+  //film_bl = glm::normalize( Vec3(-fw/2, -fh/2, -fd) );
+  //film_ur = glm::normalize( Vec3( fw/2,  fh/2, -fd) );
+  film_bl = glm::normalize( Vec3(-fw/2, -fh/2, 0.0f) );
+  film_ur = glm::normalize( Vec3( fw/2,  fh/2, 0.0f) );
 }
 
 Camera::Camera(const Vec3& origin, const Vec3& up, const Vec3& look_at,
@@ -45,13 +48,33 @@ Camera::Camera()
 
 Ray Camera::get_primary_ray(const Vec2& uv) const
 {
+  // PINHOLE MODEL
+  /*
   //this is not exactly screen space, as we have a 3D vector; it
   //is just to make calculations easier in the next step
-  Vec3 p_screenspace = Vec3(uv.x, uv.y, -fd);
+  Vec3 p_screenspace = Vec3(uv.x, uv.y, 0.0f);
 
   //this product should be element-wise!
   Vec3 p_camspace = film_bl + p_screenspace * (film_ur - film_bl);
 
   //return ray in world space
   return Ray( origin, cam2world*glm::normalize(p_camspace) );
+  */
+
+  // film sample in camera space
+  Vec3 p_camspace( film_bl+Vec3(uv,0.0f)*(film_ur-film_bl) );
+
+  // sample point on the lens, assumed to be at a distance fd from the
+  // the film plane. Given the f-stop we can compute the lens radius (in mm)
+  const float f_stop = 5.6f;
+  const float lens_diameter = fd / f_stop;
+
+  //Vec2 q_lensspace(0.0f, 0.0f); float pdf;
+  //Sampler::uniform_sample_disk(q_lensspace, pdf);
+  //q_lensspace = (q_lensspace + 1.0f) * 0.5f;
+
+  Vec3 q_camspace(0.0f, 0.0f, -fd);
+
+  //return ray in world space
+  return Ray(origin, cam2world*glm::normalize(q_camspace - p_camspace) );
 }
