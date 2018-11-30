@@ -16,6 +16,35 @@ int main(int argc, char** args)
   scene.cam.compute_parameters(Vec3(0.0f,0.1f,0.0f), Vec3(0.0f,1.0f,0.0f), Vec3(0.0f,0.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
   //scene.cam.compute_parameters(Vec3(0.0f,1.5f,-1.0f), Vec3(0.0f,0.0f,-1.0f), Vec3(0.0f,-1.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
 
+  Shape ball_light(Vec3(0.0f, 1.0f, 0.0f), 0.2f);
+  ball_light.emission = RGB(5.0f, 5.0f, 5.0f);
+  scene.add_primitive( ball_light );
+
+  Shape ball1(Vec3(0.2f, 0.1f, -0.3f), 0.1f);
+  ball1.diff_color = RGB(1.0f, 0.0f, 0.0f);
+  scene.add_primitive( ball1 );
+
+  Shape ball2(Vec3(0.1f, 0.1f, -0.5f), 0.1f);
+  ball2.diff_color = RGB(0.0f, 1.0f, 0.0f);
+  scene.add_primitive( ball2 );
+
+  Shape ball3(Vec3(0.0f, 0.1f, -0.7f), 0.1f);
+  ball3.diff_color = RGB(0.0f, 0.0f, 1.0f);
+  scene.add_primitive( ball3 );
+
+  Shape ball4(Vec3(-0.2f, 0.1f, -0.9f), 0.1f);
+  ball4.diff_color = RGB(0.0f, 1.0f, 1.0f);
+  scene.add_primitive( ball4 );
+
+  Shape ball5(Vec3(-0.4f, 0.1f, -1.1f), 0.1f);
+  ball5.diff_color = RGB(1.0f, 0.0f, 1.0f);
+  scene.add_primitive( ball5 );
+
+  Shape ball_floor(Vec3(0.0f,-60.0f,0.0f), 60.0f);
+  ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive( ball_floor );
+
+  /*
   Shape ball_floor(Vec3(0.0f,-60.0f,0.0), 60.0f);
   ball_floor.diff_color = RGB(1.0f, 0.0f, 0.0f);
   scene.add_primitive( ball_floor );
@@ -51,7 +80,9 @@ int main(int argc, char** args)
   ball_glass.type = GLASS;
   ball_glass.eta = 0.45f;
   scene.add_primitive(ball_glass);
+  */
 
+  // -------------------------------------------------
   // configure integrator and film settings ----------
   Integrator integrator;
 

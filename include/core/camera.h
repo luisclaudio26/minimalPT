@@ -28,7 +28,6 @@ public:
   // film bottom-left and upper-right corners, computed from the above
   // parameters so we can easily compute rays
   Vec3 film_bl, film_ur;
-  //Vec2 film_bl, film_ur;
 
   // get primary ray for sample (u,v) in [0,1]². for the simple case of a
   // camera, the primary can only have one direction; once we have a lens, the

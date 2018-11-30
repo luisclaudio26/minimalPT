@@ -24,10 +24,8 @@ void Camera::compute_parameters(const Vec3& origin,
   // even though things are in millimeters, the ratios cancel
   // out the units, so we should have no problems.
   fh = fw/ar;
-  //film_bl = glm::normalize( Vec3(-fw/2, -fh/2, -fd) );
-  //film_ur = glm::normalize( Vec3( fw/2,  fh/2, -fd) );
-  film_bl = glm::normalize( Vec3(-fw/2, -fh/2, 0.0f) );
-  film_ur = glm::normalize( Vec3( fw/2,  fh/2, 0.0f) );
+  film_bl = Vec3(-fw/2, -fh/2, 0.0f);
+  film_ur = Vec3( fw/2,  fh/2, 0.0f);
 }
 
 Camera::Camera(const Vec3& origin, const Vec3& up, const Vec3& look_at,
@@ -61,20 +59,29 @@ Ray Camera::get_primary_ray(const Vec2& uv) const
   return Ray( origin, cam2world*glm::normalize(p_camspace) );
   */
 
+  // THIS LENS MODEL
   // film sample in camera space
   Vec3 p_camspace( film_bl+Vec3(uv,0.0f)*(film_ur-film_bl) );
 
   // sample point on the lens, assumed to be at a distance fd from the
   // the film plane. Given the f-stop we can compute the lens radius (in mm)
-  const float f_stop = 5.6f;
+  const float f_stop = 128.0f;
   const float lens_diameter = fd / f_stop;
 
-  //Vec2 q_lensspace(0.0f, 0.0f); float pdf;
-  //Sampler::uniform_sample_disk(q_lensspace, pdf);
-  //q_lensspace = (q_lensspace + 1.0f) * 0.5f;
+  // uniform_sample_disk() is on [-0.5,0.5]². We thus multiply it by the
+  // diameter to map it from [-r,r]² (where r is the lens radius)
+  Vec2 q_lensspace; float pdf;
+  Sampler::uniform_sample_disk(q_lensspace, pdf);
+  Vec3 q_camspace(q_lensspace * lens_diameter, -fd);
 
-  Vec3 q_camspace(0.0f, 0.0f, -fd);
+  // TODO: compute ray direction using thin lens equation.
+  // we flip x and y just to deinvert the inverted image
+  Vec3 d = glm::normalize(q_camspace-p_camspace);
+  d.x *= -1.0f; d.y *= -1.0f;
 
   //return ray in world space
-  return Ray(origin, cam2world*glm::normalize(q_camspace - p_camspace) );
+  // TODO: THIS IS NOT STRICTLY CORRECT. Rays should originate not on the origin
+  // but on their actual position on the film. This works because the film is
+  // too small compared to the dimension of the objects on the scene.
+  return Ray(origin, cam2world * d );
 }
