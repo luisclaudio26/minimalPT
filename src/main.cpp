@@ -32,11 +32,11 @@ int main(int argc, char** args)
   ball3.diff_color = RGB(0.0f, 0.0f, 1.0f);
   scene.add_primitive( ball3 );
 
-  Shape ball4(Vec3(-0.2f, 0.1f, -0.9f), 0.1f);
+  Shape ball4(Vec3(-0.2f, 0.1f, -1.0f), 0.1f);
   ball4.diff_color = RGB(0.0f, 1.0f, 1.0f);
   scene.add_primitive( ball4 );
 
-  Shape ball5(Vec3(-0.4f, 0.1f, -1.1f), 0.1f);
+  Shape ball5(Vec3(-0.4f, 0.1f, -1.3f), 0.1f);
   ball5.diff_color = RGB(1.0f, 0.0f, 1.0f);
   scene.add_primitive( ball5 );
 
