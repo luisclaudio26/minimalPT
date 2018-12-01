@@ -71,7 +71,7 @@ Ray Camera::get_primary_ray(const Vec2& uv_) const
 
   // sample point on the lens, assumed to be at a distance fd from the
   // the film plane. Given the f-stop we can compute the lens radius (in mm)
-  const float f_number = 2.6f;
+  const float f_number = 64.0f;
   const float lens_diameter = fd / f_number;
   const float focus_point = 500.0f; //in mm
 
