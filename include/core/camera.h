@@ -20,7 +20,8 @@ public:
   //camera coordinate system
   Vec3 origin;
   Vec3 x, y, z;
-  Mat3 cam2world, world2cam;
+  //Mat3 cam2world, world2cam;
+  Mat4 cam2world, world2cam;
 
   //things measured in mm
   float ar, fw, fh, fd; //aspect ratio, film width, height and focal distance

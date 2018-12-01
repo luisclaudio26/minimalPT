@@ -32,6 +32,7 @@ public:
     out.o = Vec3( T * Vec4(o, 1.0f) );
 
     //TODO: allow pre-computed/uniform matrices!
+    //QUESTION: WTF is that?
     Mat3 Tit = glm::transpose( glm::inverse( Mat3(T) ) );
     out.d = Vec3( Tit * d );
 

@@ -16,6 +16,7 @@ int main(int argc, char** args)
   scene.cam.compute_parameters(Vec3(0.0f,0.1f,0.0f), Vec3(0.0f,1.0f,0.0f), Vec3(0.0f,0.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
   //scene.cam.compute_parameters(Vec3(0.0f,1.5f,-1.0f), Vec3(0.0f,0.0f,-1.0f), Vec3(0.0f,-1.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
 
+  /*
   Shape ball_light(Vec3(0.0f, 1.0f, 0.0f), 0.2f);
   ball_light.emission = RGB(5.0f, 5.0f, 5.0f);
   scene.add_primitive( ball_light );
@@ -43,8 +44,8 @@ int main(int argc, char** args)
   Shape ball_floor(Vec3(0.0f,-60.0f,0.0f), 60.0f);
   ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive( ball_floor );
+  */
 
-  /*
   Shape ball_floor(Vec3(0.0f,-60.0f,0.0), 60.0f);
   ball_floor.diff_color = RGB(1.0f, 0.0f, 0.0f);
   scene.add_primitive( ball_floor );
@@ -79,7 +80,6 @@ int main(int argc, char** args)
   ball_glass.type = GLASS;
   ball_glass.eta = 0.45f;
   scene.add_primitive(ball_glass);
-  */
 
 
   // -------------------------------------------------

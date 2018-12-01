@@ -19,7 +19,11 @@ void Camera::compute_parameters(const Vec3& origin,
   y = glm::normalize( up - glm::dot(up, z)*z );
   x = glm::normalize( glm::cross(y, z) );
 
-  cam2world = Mat3(x, y, z);
+  // matrix construction is column-wise!
+  cam2world = Mat4( Vec4(x, 0.0f),
+                    Vec4(y, 0.0f),
+                    Vec4(z, 0.0f),
+                    Vec4(origin, 1.0f));
   world2cam = glm::inverse(cam2world);
 
   // compute film corners in the camera's coordinate system.
@@ -46,7 +50,7 @@ Camera::Camera()
                       35.0f);
 }
 
-Ray Camera::get_primary_ray(const Vec2& uv) const
+Ray Camera::get_primary_ray(const Vec2& uv_) const
 {
   // PINHOLE MODEL
   /*
@@ -62,9 +66,12 @@ Ray Camera::get_primary_ray(const Vec2& uv) const
   */
 
   // THIS LENS MODEL
+  // flip axes in order to deinvert image
+  Vec2 uv(1.0f-uv_.x, 1.0f-uv_.y);
+
   // sample point on the lens, assumed to be at a distance fd from the
   // the film plane. Given the f-stop we can compute the lens radius (in mm)
-  const float f_number = 2.1f;
+  const float f_number = 2.6f;
   const float lens_diameter = fd / f_number;
   const float focus_point = 500.0f; //in mm
 
@@ -73,7 +80,6 @@ Ray Camera::get_primary_ray(const Vec2& uv) const
   Vec2 q_lensspace; float pdf;
   Sampler::uniform_sample_disk(q_lensspace, pdf);
   Vec3 q_camspace(q_lensspace * lens_diameter, 0.0f);
-  //Vec3 q_camspace(0.0f);
 
   // film sample in camera space
   float img_dist = 1.0f / (1.0f/fd - 1.0f/focus_point);
@@ -88,11 +94,15 @@ Ray Camera::get_primary_ray(const Vec2& uv) const
   Vec3 cp = main_ray( t );
 
   Vec3 d_out = glm::normalize(cp - q_camspace);
-  d_out.x *= -1.0f; d_out.y *= -1.0f;
 
   //return ray in world space
   // TODO: THIS IS NOT STRICTLY CORRECT. Rays should originate not on the origin
   // but on their actual position on the film. This works because the film is
   // too small compared to the dimension of the objects on the scene.
-  return Ray(origin, cam2world * d_out );
+  #define mm_to_m(x) (x*0.001f)
+
+  Vec4 o_worldspace( cam2world * Vec4(mm_to_m(q_camspace),1.0f) );
+  Vec4 d_worldspace( cam2world * Vec4(d_out,0.0f) );
+
+  return Ray( Vec3(o_worldspace), Vec3(d_worldspace) );
 }
