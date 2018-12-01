@@ -1,6 +1,8 @@
 #include "../../include/core/camera.h"
 #include "../../include/core/sampler.h"
 
+#include <cstdio>
+
 void Camera::compute_parameters(const Vec3& origin,
                                 const Vec3& up,
                                 const Vec3& look_at,
@@ -62,15 +64,16 @@ Ray Camera::get_primary_ray(const Vec2& uv) const
   // THIS LENS MODEL
   // sample point on the lens, assumed to be at a distance fd from the
   // the film plane. Given the f-stop we can compute the lens radius (in mm)
-  const float f_number = 24.0f;
+  const float f_number = 2.1f;
   const float lens_diameter = fd / f_number;
-  const float focus_point = 300.0f; //in mm
+  const float focus_point = 500.0f; //in mm
 
   // uniform_sample_disk() is on [-0.5,0.5]². We thus multiply it by the
   // diameter to map it from [-r,r]² (where r is the lens radius)
   Vec2 q_lensspace; float pdf;
   Sampler::uniform_sample_disk(q_lensspace, pdf);
   Vec3 q_camspace(q_lensspace * lens_diameter, 0.0f);
+  //Vec3 q_camspace(0.0f);
 
   // film sample in camera space
   float img_dist = 1.0f / (1.0f/fd - 1.0f/focus_point);
@@ -80,7 +83,9 @@ Ray Camera::get_primary_ray(const Vec2& uv) const
   // ray direction is simply [0 0 0] - p_camspace (lens center is at origin)
   Vec3 d = glm::normalize(-p_camspace);
   Ray main_ray(p_camspace, d);
-  Vec3 cp = main_ray( (img_dist-focus_point)/d.z );
+
+  float t = -(img_dist+focus_point)/d.z;
+  Vec3 cp = main_ray( t );
 
   Vec3 d_out = glm::normalize(cp - q_camspace);
   d_out.x *= -1.0f; d_out.y *= -1.0f;
