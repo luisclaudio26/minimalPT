@@ -149,7 +149,7 @@ float Shape::pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
     {
       // TODO: check this. if we uniformly sample the hemisphere I think
       // this is correct, but if we cosine-weight it this might be wrong
-      //return _over2pi;
+      //return _overpi;
       return glm::dot(out, normal) * _overpi;
     }
   }
