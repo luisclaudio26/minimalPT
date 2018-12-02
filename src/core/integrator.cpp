@@ -508,7 +508,6 @@ void Integrator::render(const Scene& scene)
   //
   // Plenoptic camera simulation would require a film that records estimatives
   // for RADIANCE, not irradiance, by discretizing the hemisphere of directions.
-  /*
   for(int j = 0; j < vRes; ++j)
     for(int i = 0; i < hRes; ++i)
     {
@@ -538,54 +537,6 @@ void Integrator::render(const Scene& scene)
       samples[sample_add] += irradiance_sample;
       weights[sample_add] += 1.0f;
     }
-    */
-
-  // ---- Multithreaded version ----
-  const int blocks_x = 4, blocks_y = 2;
-  const int patch_x = hRes/blocks_x, patch_y = vRes/blocks_y;
-  std::vector<std::thread> render_jobs;
-
-  for(int y = 0; y < blocks_y; ++y)
-    for(int x = 0; x < blocks_x; ++x)
-    {
-      // select patch for thread (i,j) and spawn render job
-      int job_x = x*patch_x, job_y = y*patch_y;
-
-      render_jobs.push_back(std::thread([&](int start_x, int start_y) {
-        for(int j = start_y; j < start_y+patch_y; ++j)
-          for(int i = start_x; i < start_x+patch_x; ++i)
-          {
-            RGB irradiance_sample(0.0f, 0.0f, 0.0f);
-
-            // uniformly sample pixel (i,j) and map sample coordinates
-            // to [0,1]² with j-axis flipping (film coordinate system)
-            float e1 = (float)rand()/RAND_MAX, e2 = (float)rand()/RAND_MAX;
-            Vec2 uv( (i+e1)/hRes, ((vRes-1)-j+e2)/vRes );
-
-            // get primary ray and first intersection,
-            // then invoke shader to compute the sample value
-            Ray primary_ray = scene.cam.get_primary_ray(uv);
-
-            Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
-            if( scene.cast_ray(primary_ray, isect) )
-              rad = pathtracer(scene, primary_ray, isect);
-
-            // cosine-weight radiance measure coming from emission_measure().
-            // as explained above, for a pinhole camera, this is our irradiance sample.
-            // Normal of the film is the look_at direction (-z)
-            irradiance_sample = rad * glm::dot(-scene.cam.z, primary_ray.d);
-
-            // sample splatting
-            int sample_add = j*hRes+i;
-            samples[sample_add] += irradiance_sample;
-            weights[sample_add] += 1.0f;
-          }
-      }, job_x, job_y));
-    }
-
-  for(auto& rj : render_jobs) rj.join();
-
-  // -------------------------------
 
   // reconstruct image (power measurements).
   // samples/weights is an estimative of the mean value of the
