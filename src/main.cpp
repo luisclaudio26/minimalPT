@@ -13,10 +13,43 @@ int main(int argc, char** args)
   // this. why is this? Must test with planes after!!!
   Scene scene;
 
-  scene.cam.compute_parameters(Vec3(0.0f,0.1f,0.0f), Vec3(0.0f,1.0f,0.0f), Vec3(0.0f,0.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
+  scene.cam.compute_parameters(Vec3(0.0f,0.5f,1.5f), Vec3(0.0f,1.0f,0.0f), Vec3(0.0f,0.5f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
   //scene.cam.compute_parameters(Vec3(0.0f,1.5f,-1.0f), Vec3(0.0f,0.0f,-1.0f), Vec3(0.0f,-1.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
 
-  /*
+  Shape ball_floor(Vec3(0.0f,-60.0f,0.0f), 60.0f);
+  ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_floor);
+
+  Shape ball_ceil(Vec3(0.0f,60.0f+1.0f,0.0f), 60.0f);
+  ball_ceil.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_ceil);
+
+  Shape ball_right(Vec3(60+0.5f, 0.0f, 0.0f), 60.0f);
+  ball_right.diff_color = RGB(0.0f, 1.0f, 0.0f);
+  scene.add_primitive(ball_right);
+
+  Shape ball_left(Vec3(-(60.0f+0.5f), 0.0f, 0.0f), 60.0f);
+  ball_left.diff_color = RGB(1.0f, 0.0f, 0.0f);
+  scene.add_primitive(ball_left);
+
+  Shape ball_back(Vec3(0.0f, 0.0f, -(60.0f+1.0f)), 60.0f);
+  ball_back.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_back);
+
+  Shape ball_1(Vec3(0.15f,0.1f,-0.2f), 0.1f);
+  ball_1.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_1);
+
+  Shape ball_2(Vec3(-0.15f,0.1f,-0.2f), 0.1f);
+  ball_2.type = DELTA;
+  scene.add_primitive(ball_2);
+
+  Shape ball_light(Vec3(0.0f,1.1f,0.0f), 0.2f);
+  ball_light.emission = RGB(5.0f, 5.0f, 5.0f);
+  scene.add_primitive(ball_light);
+
+
+  /* // SETUP II
   Shape ball_light(Vec3(0.0f, 1.0f, 0.0f), 0.2f);
   ball_light.emission = RGB(5.0f, 5.0f, 5.0f);
   scene.add_primitive( ball_light );
@@ -46,6 +79,7 @@ int main(int argc, char** args)
   scene.add_primitive( ball_floor );
   */
 
+  /* //SETUP 1
   Shape ball_floor(Vec3(0.0f,-60.0f,0.0), 60.0f);
   ball_floor.diff_color = RGB(1.0f, 0.0f, 0.0f);
   scene.add_primitive( ball_floor );
@@ -80,6 +114,7 @@ int main(int argc, char** args)
   ball_glass.type = GLASS;
   ball_glass.eta = 0.45f;
   scene.add_primitive(ball_glass);
+  */
 
 
   // -------------------------------------------------
