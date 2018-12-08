@@ -144,7 +144,6 @@ RGB Integrator::camera_path(const Scene& scene,
   // aperture).
   float path_pdf = 1.0f;
   RGB throughput(1.0f);
-  //Vec3 p = primary_ray(isect.t) + 0.0001f*isect.normal;
   Vec3 p = primary_ray(isect.t) + isect.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   Isect isect_p = isect;
   Ray o_to_p = primary_ray;
@@ -247,8 +246,9 @@ RGB Integrator::pathtracer(const Scene& scene,
   const int max_length = 5;
 
   RGB rad(0.0f);
-  for(int i = 0; i <= max_length; ++i) rad += camera_path(scene, primary_ray, isect, i);
-  //rad = camera_path(scene, primary_ray, isect, 3);
+
+  for(int i = 0; i <= max_length; ++i)
+    rad += camera_path(scene, primary_ray, isect, i);
 
   return rad;
 }
@@ -430,7 +430,7 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
     float u1 = (float)rand()/RAND_MAX;
     float u2 = (float)rand()/RAND_MAX;
     const float r = sqrt(1.0f - u1*u1);
-    const float phi = 2.0f * 3.1416f * u2;
+    const float phi = _2pi * u2;
     Vec3 w = local2world*Vec3( r*cos(phi), u1, r*sin(phi) );
 
     // send ray in direction w and check if there's emission
@@ -447,7 +447,6 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
                   * glm::dot(isect.normal,w)
                   * isect.shape->brdf(isect.normal, w, o);
     }
-
 
     // accumulate, weighting it by 1/p(w). as we're uniformly sampling
     // the hemisphere, p(w) = 1/2pi, thus we multiply it by 2pi.
@@ -525,7 +524,6 @@ void Integrator::render(const Scene& scene)
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
         rad = pathtracer(scene, primary_ray, isect);
-        //rad = (1.0f+primary_ray.d)*0.5f;
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.

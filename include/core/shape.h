@@ -13,7 +13,7 @@ class Shape
 {
 public:
   Shape(const Vec3& o, float r)
-    : o(o), r(r), diff_color(0.0f,1.0f,0.0f), emission(0.0f), type(LAMBERTIAN), eta(1.0f) { }
+    : o(o), r(r), diff_color(0.0f,0.0f,0.0f), emission(0.0f), type(LAMBERTIAN), eta(1.0f) { }
 
   // we'll handle spheres only at first!
   Vec3 o; float r;
