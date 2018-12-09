@@ -129,11 +129,17 @@ int main(int argc, char** args)
   // -------------------------------------------------
   // configure integrator and film settings ----------
   Integrator integrator;
+
   integrator.start_rendering(scene);
 
-  for(;;) integrator.dump_image();
-
+  std::chrono::high_resolution_clock::time_point tS = std::chrono::high_resolution_clock::now();
   for(auto& t : integrator.render_jobs) t.join();
+  std::chrono::high_resolution_clock::time_point tE = std::chrono::high_resolution_clock::now();
+
+  std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(tE - tS);
+  double acc_time = time_span.count();
+
+  printf("%f s\n", acc_time);
 
   // invoke renderer ----------
   /*
