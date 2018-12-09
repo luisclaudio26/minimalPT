@@ -19,7 +19,7 @@ void Integrator::render_patch(int start_x, int block_sz_x,
 
   // render the whole patch one sample at time.
   // this will allow the progressive visualization
-  for(int spp = 0; spp < 10; ++spp)
+  for(int spp = 0; spp < 1000; ++spp)
   {
     for(int j = start_y; j < start_y+block_sz_y; ++j)
     {
@@ -34,7 +34,8 @@ void Integrator::render_patch(int start_x, int block_sz_x,
 
         // get primary ray and first intersection,
         // then invoke shader to compute the sample value
-        Ray primary_ray = scene.cam.get_primary_ray(uv);
+        //Ray primary_ray = scene.cam.get_primary_ray(uv);
+        Ray primary_ray( Vec3(0.0f), Vec3(0.0f,0.0f,-1.0f) );
         Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
 
         //if( scene.cast_ray(primary_ray, isect) )
@@ -56,7 +57,6 @@ void Integrator::render_patch(int start_x, int block_sz_x,
 
     // check whether there was a request from the integrator to halt.
     // if it is the case, wait on condition variable cv
-
     if(halt)
     {
       // TODO: acho que isso não funciona bem, já que é possível que o
