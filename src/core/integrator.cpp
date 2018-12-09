@@ -7,6 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <random>
 
 // --------------------------------------------------------------------
 // ------------------ Pathtracing helper functions --------------------
@@ -556,7 +557,9 @@ void Integrator::start_rendering(const Scene& scene)
   // -> rand()
   // -> get_primary_ray()
   // -> cast_ray()
-  const int blocks_x = 1, blocks_y = 1;
+  //
+  // Even so, speedups are of about 4x, not 8x. why?
+  const int blocks_x = 2, blocks_y = 4;
   const int patch_x = hRes/blocks_x, patch_y = vRes/blocks_y;
 
   for(int y = 0; y < blocks_y; ++y)
@@ -567,7 +570,13 @@ void Integrator::start_rendering(const Scene& scene)
 
       render_jobs.push_back(std::thread([this,patch_x,patch_y,&scene](int start_x, int start_y) {
 
-        for(int spp = 0; spp < 4096; ++spp)
+        // initialize random number generate. one per thread should be thread-safe!
+        std::mt19937 mt;
+        std::uniform_real_distribution<float> random_float(0.0f, 1.0f);
+
+        // render the whole patch one sample at time.
+        // this will allow the progressive visualization
+        for(int spp = 0; spp < 200; ++spp)
         {
           for(int j = start_y; j < start_y+patch_y; ++j)
           {
@@ -577,18 +586,16 @@ void Integrator::start_rendering(const Scene& scene)
 
               // uniformly sample pixel (i,j) and map sample coordinates
               // to [0,1]² with j-axis flipping (film coordinate system)
-              //float e1 = (float)rand()/RAND_MAX, e2 = (float)rand()/RAND_MAX;
-              float e1 = 0.3353f, e2 = 0.6674f;
+              float e1 = random_float(mt), e2 = random_float(mt);
               Vec2 uv( (i+e1)/hRes, ((vRes-1)-j+e2)/vRes );
 
               // get primary ray and first intersection,
               // then invoke shader to compute the sample value
-              //Ray primary_ray = scene.cam.get_primary_ray(uv);
-              Ray primary_ray( Vec3(0.0f,0.0f,0.0f), Vec3(0.0f, 0.0f, -1.0f) ); // TEST CODE
+              Ray primary_ray = scene.cam.get_primary_ray(uv);
               Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
 
-              //if( scene.cast_ray(primary_ray, isect) ) rad = normal_shading(scene, primary_ray, isect);
-              rad = RGB(0.4f, 0.2f, 0.5f);
+              if( scene.cast_ray(primary_ray, isect) )
+                rad = normal_shading(scene, primary_ray, isect);
 
               // cosine-weight radiance measure coming from emission_measure().
               // as explained above, for a pinhole camera, this is our irradiance sample.

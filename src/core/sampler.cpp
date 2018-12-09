@@ -1,5 +1,8 @@
 #include "../../include/core/sampler.h"
 
+// internal random number engine
+static std::mt19937 SAMPLER_MT;
+
 void Sampler::sample_hemisphere(Vec3& out, float& pdf)
 {
   float u1 = (float)rand()/RAND_MAX;
@@ -29,8 +32,9 @@ void Sampler::sample_sphere(Vec3& out, float& pdf)
 
 void Sampler::uniform_sample_disk(Vec2& out, float& pdf)
 {
-  float u1 = (float)rand()/RAND_MAX;
-  float u2 = (float)rand()/RAND_MAX;
+  std::uniform_real_distribution<float> random_float(0.0f, 1.0f);
+  float u1 = random_float(SAMPLER_MT);
+  float u2 = random_float(SAMPLER_MT);
 
   float r = sqrt(u1);
   float theta = _2pi * u2;

@@ -3,6 +3,7 @@
 
 #include "spectrum.h"
 #include "geometry.h"
+#include <random>
 
 const float _pi = 3.141592654f;
 const float _2pi = 2.0f*_pi;
