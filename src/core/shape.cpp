@@ -1,6 +1,9 @@
 #include "../../include/core/shape.h"
 #include "../../include/core/sampler.h"
 #include <cstdio>
+#include <random>
+
+static std::mt19937 SHAPE_MT;
 
 bool Shape::intersect(const Ray& ray, Isect& tgt) const
 {
@@ -118,7 +121,6 @@ Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bo
     {
       Vec3 w_;
       Sampler::cosine_weight_sample_hemisphere(w_, pdf_solidangle);
-      //Sampler::sample_hemisphere(w_, pdf_solidangle);
       glm::mat3 local2world = get_local_coordinate_system(normal);
       return local2world * w_;
     };
@@ -174,8 +176,10 @@ void Shape::sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const
 {
   // uniformly sample point on a unitary sphere centered at the origin,
   // then scale and translate it so it lies on the surface of this sphere
-  float u1 = (float)rand()/RAND_MAX;
-  float u2 = (float)rand()/RAND_MAX;
+  std::uniform_real_distribution<float> random_float(0.0f, 1.0f);
+  float u1 = random_float(SHAPE_MT);
+  float u2 = random_float(SHAPE_MT);
+
   float y = 1 - 2*u1;
   float r = sqrt(std::max(0.0f, 1.0f - y * y));
   float phi = 2.0f*3.141592654f * u2;

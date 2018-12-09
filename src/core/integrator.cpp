@@ -9,6 +9,75 @@
 #include <atomic>
 #include <random>
 
+void Integrator::render_patch(int start_x, int block_sz_x,
+                              int start_y, int block_sz_y,
+                              const Scene& scene)
+{
+  // initialize random number generate. one per thread should be thread-safe!
+  std::mt19937 mt;
+  std::uniform_real_distribution<float> random_float(0.0f, 1.0f);
+
+  // render the whole patch one sample at time.
+  // this will allow the progressive visualization
+  for(int spp = 0; spp < 10; ++spp)
+  {
+    for(int j = start_y; j < start_y+block_sz_y; ++j)
+    {
+      for(int i = start_x; i < start_x+block_sz_x; ++i)
+      {
+        RGB irradiance_sample(0.0f, 0.0f, 0.0f);
+
+        // uniformly sample pixel (i,j) and map sample coordinates
+        // to [0,1]² with j-axis flipping (film coordinate system)
+        float e1 = random_float(mt), e2 = random_float(mt);
+        Vec2 uv( (i+e1)/hRes, ((vRes-1)-j+e2)/vRes );
+
+        // get primary ray and first intersection,
+        // then invoke shader to compute the sample value
+        Ray primary_ray = scene.cam.get_primary_ray(uv);
+        Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
+
+        //if( scene.cast_ray(primary_ray, isect) )
+          //rad = pathtracer(scene, primary_ray, isect);
+          //rad = normal_shading(scene, primary_ray, isect);
+        rad = RGB(0.2f);
+
+        // cosine-weight radiance measure coming from emission_measure().
+        // as explained above, for a pinhole camera, this is our irradiance sample.
+        // Normal of the film is the look_at direction (-z)
+        irradiance_sample = rad * glm::dot(-scene.cam.z, primary_ray.d);
+
+        // sample splatting
+        int sample_add = j*hRes+i;
+        samples[sample_add] += irradiance_sample;
+        weights[sample_add] += 1.0f;
+      }
+    }
+
+    // check whether there was a request from the integrator to halt.
+    // if it is the case, wait on condition variable cv
+
+    if(halt)
+    {
+      // TODO: acho que isso não funciona bem, já que é possível que o
+      // contador seja incrementado, o dump_image verifique que o contador
+      // em questao chegou na contagem certa pra começar a dumpar a imagem
+      // e só depois que o cv.wait() entre em ação. não sei se isso causa
+      // muito problema though.
+      //printf("%d\n", spp);
+      std::unique_lock<std::mutex> lck(mtx);
+      counter++;
+      cv.wait(lck);
+    }
+
+  }
+
+  // thread has terminated; sinalize it
+  done++;
+}
+
+
+
 // --------------------------------------------------------------------
 // ------------------ Pathtracing helper functions --------------------
 // --------------------------------------------------------------------
@@ -21,6 +90,7 @@ static RGB sample_light(const Ray& primary_ray,
   Vec3 d = -primary_ray.d;
 
   // randomly pick a lightsource...
+  // TODO: USE MARSENE TWISTER HERE!
   const int idx = rand() % scene.emissive_prims.size();
   const Shape& l = scene.prims[ scene.emissive_prims[idx] ];
 
@@ -112,12 +182,13 @@ Integrator::Integrator()
 
   // thread coordination tools
   counter = 0;
+  done = 0;
   halt = false;
 }
 
 RGB Integrator::camera_path(const Scene& scene,
                             const Ray& primary_ray,
-                            const Isect& isect, int path_length)
+                            const Isect& isect, int path_length) const
 {
   // we want to know the radiance L exiting from p = primary_ray(isect.t) and
   // going to the origin of primary_ray, along the direction primary_ray.d.
@@ -235,12 +306,12 @@ RGB Integrator::camera_path(const Scene& scene,
 
 RGB Integrator::pathtracer(const Scene& scene,
                             const Ray& primary_ray,
-                            const Isect& isect)
+                            const Isect& isect) const
 {
   // TODO: russian rouletting. the it is done below is
   // underestimating the total radiance, thus the image
   // is always darker than it should
-  const int max_length = 5;
+  const int max_length = 3;
 
   RGB rad(0.0f);
 
@@ -252,14 +323,14 @@ RGB Integrator::pathtracer(const Scene& scene,
 
 RGB Integrator::normal_shading(const Scene& scene,
                                 const Ray& primary_ray,
-                                const Isect& isect)
+                                const Isect& isect) const
 {
   return (isect.normal+1.0f)*0.5f;
 }
 
 RGB Integrator::radiance_measurement(const Scene& scene,
                                       const Ray& primary_ray,
-                                      const Isect& isect)
+                                      const Isect& isect) const
 {
   // this is a measurement of the radiance arriving at the origin
   // of the ray, thus we do not consider the cosine-weighting which
@@ -281,7 +352,7 @@ RGB Integrator::radiance_measurement(const Scene& scene,
 
 RGB Integrator::direct_illumination_surfacearea(const Scene& scene,
                                                 const Ray& primary_ray,
-                                                const Isect& isect)
+                                                const Isect& isect) const
 {
   // Recall that estimating direct illumination amounts to approximate the
   // light transport equation by computing irradiance coming only from emissive
@@ -377,7 +448,7 @@ RGB Integrator::direct_illumination_surfacearea(const Scene& scene,
 
 RGB Integrator::direct_illumination_solidangle(const Scene& scene,
                                                 const Ray& primary_ray,
-                                                const Isect& isect)
+                                                const Isect& isect) const
 {
   // direct illumination computes the radiance at the intersection point p and
   // direction d = -primary_ray.d. we consider now not only the emission term (as in
@@ -554,12 +625,10 @@ void Integrator::start_rendering(const Scene& scene)
 {
   // QUESTION: MULTITHREADED VERSION ACTUALLY TAKES LONGER. WHY?
   // Functions which are slowing things down:
-  // -> rand()
-  // -> get_primary_ray()
   // -> cast_ray()
   //
   // Even so, speedups are of about 4x, not 8x. why?
-  const int blocks_x = 2, blocks_y = 4;
+  const int blocks_x = 1, blocks_y = 8;
   const int patch_x = hRes/blocks_x, patch_y = vRes/blocks_y;
 
   for(int y = 0; y < blocks_y; ++y)
@@ -568,66 +637,8 @@ void Integrator::start_rendering(const Scene& scene)
       // select patch for thread (i,j) and spawn render job
       int job_x = x*patch_x, job_y = y*patch_y;
 
-      render_jobs.push_back(std::thread([this,patch_x,patch_y,&scene](int start_x, int start_y) {
-
-        // initialize random number generate. one per thread should be thread-safe!
-        std::mt19937 mt;
-        std::uniform_real_distribution<float> random_float(0.0f, 1.0f);
-
-        // render the whole patch one sample at time.
-        // this will allow the progressive visualization
-        for(int spp = 0; spp < 200; ++spp)
-        {
-          for(int j = start_y; j < start_y+patch_y; ++j)
-          {
-            for(int i = start_x; i < start_x+patch_x; ++i)
-            {
-              RGB irradiance_sample(0.0f, 0.0f, 0.0f);
-
-              // uniformly sample pixel (i,j) and map sample coordinates
-              // to [0,1]² with j-axis flipping (film coordinate system)
-              float e1 = random_float(mt), e2 = random_float(mt);
-              Vec2 uv( (i+e1)/hRes, ((vRes-1)-j+e2)/vRes );
-
-              // get primary ray and first intersection,
-              // then invoke shader to compute the sample value
-              Ray primary_ray = scene.cam.get_primary_ray(uv);
-              Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
-
-              if( scene.cast_ray(primary_ray, isect) )
-                rad = normal_shading(scene, primary_ray, isect);
-
-              // cosine-weight radiance measure coming from emission_measure().
-              // as explained above, for a pinhole camera, this is our irradiance sample.
-              // Normal of the film is the look_at direction (-z)
-              irradiance_sample = rad * glm::dot(-scene.cam.z, primary_ray.d);
-
-              // sample splatting
-              int sample_add = j*hRes+i;
-              samples[sample_add] += irradiance_sample;
-              weights[sample_add] += 1.0f;
-            }
-          }
-
-          // check whether there was a request from the integrator to halt.
-          // if it is the case, wait on condition variable cv
-          /*
-          if(halt)
-          {
-            // TODO: acho que isso não funciona bem, já que é possível que o
-            // contador seja incrementado, o dump_image verifique que o contador
-            // em questao chegou na contagem certa pra começar a dumpar a imagem
-            // e só depois que o cv.wait() entre em ação. não sei se isso causa
-            // muito problema though.
-            //printf("%d\n", spp);
-            std::unique_lock<std::mutex> lck(mtx);
-            counter++;
-            cv.wait(lck);
-          } */
-
-        }
-
-      }, job_x, job_y));
+      render_jobs.push_back(std::thread(&Integrator::render_patch, std::ref(*this),
+                                        job_x, patch_x, job_y, patch_y, scene));
     }
 }
 
@@ -635,11 +646,15 @@ void Integrator::dump_image()
 {
   // wait for threads to draw a bit
   //printf("Waiting to dump image...\n");
-  std::this_thread::sleep_for( std::chrono::seconds(5) );
+  std::this_thread::sleep_for( std::chrono::seconds(2) );
+
+  // TODO: blocks if threads have already terminated.
+  const int n_threads = render_jobs.size();
+  if(done == n_threads) return;
 
   // request halting and wait for all threads to halt
   halt = true;
-  while(counter < render_jobs.size());
+  while(counter < n_threads);
 
   // update frame on disk
   // ---------------------------------------------------------------------------

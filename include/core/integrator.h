@@ -14,28 +14,28 @@ class Integrator
 private:
   RGB direct_illumination_solidangle(const Scene& scene,
                                       const Ray& primary_ray,
-                                      const Isect& isect);
+                                      const Isect& isect) const;
 
   RGB direct_illumination_surfacearea(const Scene& scene,
                                       const Ray& primary_ray,
-                                      const Isect& isect);
+                                      const Isect& isect) const;
 
   RGB camera_path(const Scene& scene,
                   const Ray& primary_ray,
                   const Isect& isect,
-                  int path_length = 1);
+                  int path_length = 1) const;
 
   RGB pathtracer(const Scene& scene,
                   const Ray& primary_ray,
-                  const Isect& isect);
+                  const Isect& isect) const;
 
   RGB radiance_measurement(const Scene& scene,
                             const Ray& primary_ray,
-                            const Isect& isect);
+                            const Isect& isect) const;
 
   RGB normal_shading(const Scene& scene,
                       const Ray& primary_ray,
-                      const Isect& isect);
+                      const Isect& isect) const;
 
   // maps a given irradiance measurement to a pixel output.
   // Ideally we should convert ENERGY measurements (irradiance
@@ -67,10 +67,14 @@ public:
   bool halt;
   std::mutex mtx;
   std::condition_variable cv;
-  std::atomic<int> counter;
+  std::atomic<int> counter, done;
 
   void start_rendering(const Scene& scene);
   void dump_image();
+
+  void render_patch(int start_x, int block_sz_x,
+                    int start_y, int block_sz_y,
+                    const Scene& scene);
 };
 
 #endif

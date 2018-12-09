@@ -1,4 +1,5 @@
 #include "../include/frontend/gui.h"
+#include <iostream>
 
 int main(int argc, char** args)
 {
@@ -133,13 +134,23 @@ int main(int argc, char** args)
   integrator.start_rendering(scene);
 
   std::chrono::high_resolution_clock::time_point tS = std::chrono::high_resolution_clock::now();
+
+  /*
+  for(int i = 0; i < 5; ++i)
+  {
+    integrator.dump_image();
+    std::cout<<"\rPreview "<<i;
+    std::cout.flush();
+  }
+  */
+
   for(auto& t : integrator.render_jobs) t.join();
   std::chrono::high_resolution_clock::time_point tE = std::chrono::high_resolution_clock::now();
 
   std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(tE - tS);
   double acc_time = time_span.count();
 
-  printf("%f s\n", acc_time);
+  printf("\n%f s\n", acc_time);
 
   // invoke renderer ----------
   /*
