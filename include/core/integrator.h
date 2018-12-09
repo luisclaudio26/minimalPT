@@ -4,6 +4,10 @@
 #include "geometry.h"
 #include "scene.h"
 #include "spectrum.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 
 class Integrator
 {
@@ -58,6 +62,15 @@ public:
   ColorBuffer frame;
 
   void render(const Scene& scene);
+
+  std::vector<std::thread> render_jobs;
+  bool halt;
+  std::mutex mtx;
+  std::condition_variable cv;
+  std::atomic<int> counter;
+
+  void start_rendering(const Scene& scene);
+  void dump_image();
 };
 
 #endif

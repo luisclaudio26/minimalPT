@@ -1,10 +1,12 @@
 #include "../../include/core/integrator.h"
 #include "../../include/core/sampler.h"
+
 #include <cstdio>
 #include <chrono>
 #include <thread>
-
-using namespace std::chrono;
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 
 // --------------------------------------------------------------------
 // ------------------ Pathtracing helper functions --------------------
@@ -105,17 +107,11 @@ Integrator::Integrator()
   int n = vRes*hRes;
   samples.insert(samples.begin(), n, RGB(0.0f,0.0f,0.0f));
   weights.insert(weights.begin(), n, 0.0f);
-    frame.insert(  frame.begin(), n, RGBA(0.1f,0.1f,0.1f,1.0f));
+  frame.insert(frame.begin(), n, RGBA(0.1f,0.1f,0.1f,1.0f));
 
-  // compute pixel area from film info. TODO: how to have access to this??
-  /*
-  float film_width = 35.0f; //in mm
-  float aspect_ratio = 4.0f/3.0f;
-  float film_height = film_width / aspect_ratio;
-  pixel_area = (film_width/hRes) * (film_height/vRes);
-
-  printf("Pixel area: %f mm²\n", pixel_area);
-  */
+  // thread coordination tools
+  counter = 0;
+  halt = false;
 }
 
 RGB Integrator::camera_path(const Scene& scene,
@@ -551,4 +547,111 @@ void Integrator::render(const Scene& scene)
     RGB avg_irradiance = samples[i]/weights[i];
     frame[i] = camera_response_curve(avg_irradiance);
   }
+}
+
+void Integrator::start_rendering(const Scene& scene)
+{
+  const int blocks_x = 1, blocks_y = 1;
+  const int patch_x = hRes/blocks_x, patch_y = vRes/blocks_y;
+
+  for(int y = 0; y < blocks_y; ++y)
+    for(int x = 0; x < blocks_x; ++x)
+    {
+      // select patch for thread (i,j) and spawn render job
+      int job_x = x*patch_x, job_y = y*patch_y;
+
+      render_jobs.push_back(std::thread([this,patch_x,patch_y,&scene](int start_x, int start_y) {
+        for(int spp = 0; spp < 4096; ++spp)
+        {
+          // ----
+          for(int j = start_y; j < start_y+patch_y; ++j)
+            for(int i = start_x; i < start_x+patch_x; ++i)
+            {
+              RGB irradiance_sample(0.0f, 0.0f, 0.0f);
+
+              // uniformly sample pixel (i,j) and map sample coordinates
+              // to [0,1]² with j-axis flipping (film coordinate system)
+              float e1 = (float)rand()/RAND_MAX, e2 = (float)rand()/RAND_MAX;
+              Vec2 uv( (i+e1)/hRes, ((vRes-1)-j+e2)/vRes );
+
+              // get primary ray and first intersection,
+              // then invoke shader to compute the sample value
+              Ray primary_ray = scene.cam.get_primary_ray(uv);
+              Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
+              //if( scene.cast_ray(primary_ray, isect) )
+                //rad = RGB(0.0f);
+                //rad = normal_shading(scene, primary_ray, isect);
+                //rad = pathtracer(scene, primary_ray, isect);
+
+              // cosine-weight radiance measure coming from emission_measure().
+              // as explained above, for a pinhole camera, this is our irradiance sample.
+              // Normal of the film is the look_at direction (-z)
+              irradiance_sample = rad * glm::dot(-scene.cam.z, primary_ray.d);
+
+              // sample splatting
+              int sample_add = j*hRes+i;
+              samples[sample_add] += irradiance_sample;
+              weights[sample_add] += 1.0f;
+            }
+          // ----
+
+          // check whether there was a request from the integrator to halt.
+          // if it is the case, wait on condition variable cv
+          if(halt)
+          {
+            // TODO: acho que isso não funciona bem, já que é possível que o
+            // contador seja incrementado, o dump_image verifique que o contador
+            // em questao chegou na contagem certa pra começar a dumpar a imagem
+            // e só depois que o cv.wait() entre em ação. não sei se isso causa
+            // muito problema though.
+            printf("%d\n", spp);
+            std::unique_lock<std::mutex> lck(mtx);
+            counter++;
+            cv.wait(lck);
+          }
+
+        }
+      }, job_x, job_y));
+    }
+}
+
+void Integrator::dump_image()
+{
+  // wait for threads to draw a bit
+  //printf("Waiting to dump image...\n");
+  std::this_thread::sleep_for( std::chrono::seconds(5) );
+
+  // request halting and wait for all threads to halt
+  halt = true;
+  while(counter < render_jobs.size());
+
+  // update frame on disk
+  // ---------------------------------------------------------------------------
+  typedef struct {
+    unsigned char r, g, b;
+  } RGBuchar;
+
+  RGBuchar *img = new RGBuchar[vRes*hRes];
+  for(int i = 0; i < vRes*hRes; ++i)
+  {
+    RGBA rad = camera_response_curve(samples[i]/weights[i]);
+    RGBuchar out;
+  	out.r = (unsigned char)std::fmin(255.0f, 255.0f * rad.r);
+  	out.g = (unsigned char)std::fmin(255.0f, 255.0f * rad.g);
+  	out.b = (unsigned char)std::fmin(255.0f, 255.0f * rad.b);
+    img[i] = out;
+  }
+
+	FILE* file_out = fopen("frame.ppm", "wb");
+	fprintf(file_out, "P6\n%d %d\n255\n", hRes, vRes);
+	fwrite((const void*)img, sizeof(unsigned char), 3*hRes*vRes, file_out);
+	fclose(file_out);
+
+  delete[] img;
+  // ---------------------------------------------------------------------------
+
+  // reset counter and notify threads to resume execution
+  counter = 0;
+  halt = false;
+  cv.notify_all();
 }
