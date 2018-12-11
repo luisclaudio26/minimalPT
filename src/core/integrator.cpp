@@ -413,8 +413,6 @@ RGB Integrator::direct_illumination_solidangle(const Scene& scene,
   // Obviously incoming light has many different sources, but direct illumination
   // approximates this by considering ONLY light that comes from light sources.
   // Thus.
-  const float _2pi = 2.0f * 3.141592654f;
-  const float over2pi = 1.0f / _2pi;
   const int n_samples = 1;
   const float over_n_samples = 1.0f / n_samples;
 
@@ -551,4 +549,37 @@ void Integrator::render(const Scene& scene)
     RGB avg_irradiance = samples[i]/weights[i];
     frame[i] = camera_response_curve(avg_irradiance);
   }
+}
+
+RGB Integrator::light_path(const Scene& scene, int path_length)
+{
+  // pick light source
+  // TODO: do not use rand()!
+  // TODO: importance sample total emitted power
+  const int idx = rand() % scene.emissive_prims.size();
+  const Shape& l = scene.prims[ scene.emissive_prims[idx] ];
+
+  // sample light source surface
+  Vec3 light_sample, light_normal; float light_pdf;
+  l.sample_surface(light_sample, light_normal, light_pdf);
+
+  // TODO: ...bounce light path throughout the scene...
+
+  // if path_length is 1, trace ray directly to the camera lens
+  Vec3 lens_sample; float lens_pdf;
+  scene.camera.sample_lens(lens_sample, lens_pdf);
+
+  // trace ray from the last bounce to the lens sample position.
+  // remember that this implies (1) check visibility, (2) computing
+  // PDF of tracing this ray based on the BRDF of the last intersection
+  // point and (3) an update of the path throughput. this is the final
+  // radiance we want to return
+}
+
+RGB Integrator::light_tracer(const Scene& scene)
+{
+  // once we have the radiance arriving at the given lens sample, at
+  // the given direction, the camera should be able to "deposit" this
+  // sample on the film somehow
+  return light_path(scene, 1);
 }

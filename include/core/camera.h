@@ -20,7 +20,6 @@ public:
   //camera coordinate system
   Vec3 origin;
   Vec3 x, y, z;
-  //Mat3 cam2world, world2cam;
   Mat4 cam2world, world2cam;
 
   //things measured in mm
@@ -35,6 +34,8 @@ public:
   // same (u,v) will receive contribution from many rays coming from different
   // points of the lens
 	Ray get_primary_ray(const Vec2& uv) const;
+
+  void sample_lens(Vec3& pos, float& pdf) const;
 };
 
 #endif
