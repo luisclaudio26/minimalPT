@@ -29,13 +29,14 @@ public:
   // parameters so we can easily compute rays
   Vec3 film_bl, film_ur;
 
-  // get primary ray for sample (u,v) in [0,1]². for the simple case of a
+  // get primary ray for sample (u,v) in [0,1]². for the simple case of a pinhole
   // camera, the primary can only have one direction; once we have a lens, the
   // same (u,v) will receive contribution from many rays coming from different
   // points of the lens
 	Ray get_primary_ray(const Vec2& uv) const;
 
-  void sample_lens(Vec3& pos, float& pdf) const;
+  void sample_lens(Vec3& pos_world, Vec2& pos_lens, float& pdf) const;
+  Vec2 deposit_sample(const Vec2& pos_lens, const Vec3& dir_world) const;
 };
 
 #endif

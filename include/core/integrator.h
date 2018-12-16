@@ -25,8 +25,7 @@ private:
                   const Ray& primary_ray,
                   const Isect& isect);
 
-  RGB light_path(const Scene& scene,
-                  int path_length = 1);
+  void light_path(const Scene& scene, int path_length = 1);
 
   RGB radiance_measurement(const Scene& scene,
                             const Ray& primary_ray,
@@ -61,7 +60,7 @@ public:
   ColorBuffer frame;
 
   void render(const Scene& scene);
-  RGB light_tracer(const Scene& scene);
+  void light_tracer(const Scene& scene);
 };
 
 #endif

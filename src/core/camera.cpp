@@ -106,3 +106,46 @@ Ray Camera::get_primary_ray(const Vec2& uv_) const
 
   return Ray( Vec3(o_worldspace), Vec3(d_worldspace) );
 }
+
+void Camera::sample_lens(Vec3& pos_world, Vec2& pos_lens, float& pdf) const
+{
+  // TODO: precompute and store this
+  // sample point on the lens, assumed to be at a distance fd from the
+  // the film plane. Given the f-stop we can compute the lens radius (in mm)
+  const float f_number = 64.0f;
+  const float lens_diameter = fd / f_number;
+  const float focus_point = 500.0f; //in mm
+  #define mm_to_m(x) (x*0.001f)
+
+  // camera lens space -> camera space -> world space
+  Sampler::uniform_sample_disk(pos_lens, pdf);
+  Vec3 pos_camera(pos_lens * lens_diameter, 0.0f);
+  pos_world = Vec3( cam2world * Vec4(mm_to_m(pos_camera), 1.0f) );
+}
+
+Vec2 Camera::deposit_sample(const Vec2& pos_lens, const Vec3& dir_world) const
+{
+  const float f_number = 64.0f;
+  const float lens_diameter = fd / f_number;
+  const float focus_point = 500.0f; //in mm
+  const float img_dist = 1.0f / (1.0f/fd - 1.0f/focus_point);
+
+  // get dir_world and pos_lens both in camera space
+  Vec3 dir_cam = Vec3(world2cam * Vec4(dir_world, 0.0f));
+  Vec3 pos_cam = Vec3(pos_lens * lens_diameter, 0.0f);
+
+  // get intersection of the ray (pos_cam, dir_cam) with the focal plane
+  float t = -(fd + pos_cam.z)/dir_cam.z;
+  Vec3 p = pos_cam + t*dir_cam;
+
+  // get position of the projected sample in camera space
+  // (those are elementwise product/division operations) by
+  // pinhole-projecting the point p onto the image plane
+  Vec3 sample_cam = (img_dist * p) / -focus_point;
+
+  // the point p must be a linear interpolation between
+  // film_bl and film_ur (independent in each axis)
+  Vec3 a( (sample_cam-film_bl)/(film_ur-film_bl) );
+
+  return Vec2(a.x, a.y);
+}
