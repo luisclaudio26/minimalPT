@@ -25,6 +25,15 @@ private:
                   const Ray& primary_ray,
                   const Isect& isect);
 
+  RGB bd_path(const Scene& scene,
+              const Ray& primary_ray,
+              const Isect& isect,
+              int path_length = 2);
+
+  RGB bdpt(const Scene& scene,
+            const Ray& primary_ray,
+            const Isect& isect);
+
   void light_path(const Scene& scene, int path_length = 1);
 
   RGB radiance_measurement(const Scene& scene,

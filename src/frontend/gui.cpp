@@ -52,8 +52,8 @@ void GUI::drawContents()
   static int spp_count = 0;
   if( spp_count < 4096 )
   {
-    //integrator.render(this->scene);
-    integrator.light_tracer(this->scene);
+    integrator.render(this->scene);
+    //integrator.light_tracer(this->scene);
     spp_count++;
     std::cout<<"\rComputed "<<spp_count<<" samples per pixel"<<std::flush;
   }

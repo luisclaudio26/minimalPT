@@ -118,6 +118,135 @@ Integrator::Integrator()
   */
 }
 
+
+RGB Integrator::bd_path(const Scene& scene,
+                        const Ray& primary_ray,
+                        const Isect& isect,
+                        int path_length)
+{
+  // ------------------------------
+  // ---- Auxiliary structures ----
+  // ------------------------------
+  typedef struct
+  {
+    Isect isect; // intersection info
+    Vec3 pos     // position of this vertex
+    Ray last;    // the ray that upon intersection returned this vertex
+  } Vertex;
+  // ------------------------------
+
+  // direct path from light source
+  if(path_length == 1) return isect.shape->emission;
+
+  // build paths of the same length, by building a camera path step to step
+  // and completing it with light paths of the needed size.
+  // if the camera path has length C and we need to build a path of length L,
+  // our light path must have size L-C-1 : L-C remaning edges, minus 1 (the
+  // the connection edge).
+  RGB rad(0.0f);
+  int n_paths = path_length - 1; // TODO: check this!
+
+  // TODO: in this first version we won't compute the path pdfs!
+  Vertex cam_sample; RGB tp_cp(1.0f);
+  cam_sample.pos = Vec3(primary_ray(isect.t) + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f));
+  cam_sample.isect = isect;
+  cam_sample.last = primary_ray;
+
+  for(int cp = 1; cp < path_length; ++cp)
+  {
+    // light subpath parameters.
+    // please read "lit" as "light" (needed in order
+    // to provide visually appealing identation [= )
+    Vertex lit_sample; RGB tp_lp(1.0f);
+
+    // randomly pick a light source and sample it.
+    // TODO: importance sample emitting power!
+    const int idx = rand() % scene.emissive_prims.size();
+    const Shape& light = scene.prims[ scene.emissive_prims[idx] ];
+
+    float lit_sample_pdf; Vec3 normal;
+    light.sample_surface(lit_sample.pos, normal, lit_sample_pdf);
+
+    // incrementally build light subpath, with as many edges as needed to
+    // compute a full path of length path_length.
+    int light_path_length = path_length-cp-1;
+
+    // TODO: light paths of length 0 should be used and final connection should
+    // be done using multiple importance sampling of BRDF/light sampling
+    if(light_path_length == 0) break;
+
+    // TODO: this first version will simply throw a ray in the normal direction
+    // of the light source.
+    Ray light_to_scene(lit_sample.pos, normal);
+    if( scene.cast_ray() ) // TODO: incomplete. what happens if this ray escapes
+                           // the scene? maybe try until the ray intersects
+                           // something, or do we sample the geometry?
+
+    for(int lp = 0; lp < light_path_length-1; ++lp)
+    {
+      // TODO: create light paths of increasing length starting from the light
+      // source sample.
+      //
+      // at the end of this loop, tp_lp must have the throughput accumulated of
+      // path_length-cp-2 bounces (the last one cannot be computed, as it is
+      // depends on the connection edge).
+    }
+
+    // connect paths
+    // final throughput is the product of the current throughputs, times the
+    // brdf.cos() terms in the last camera and light subpath vertices.
+    Vec3 cam_to_light = glm::normalize(lit_sample.pos - cam_sample.pos);
+
+    RGB tp_cam_last = glm::dot(cam_to_light, cam_sample.isect.normal)
+                              * cam_sample.isect.shape->brdf(cam_sample.last.d,
+                                                              cam_to_light,
+                                                              cam_sample.pos);
+
+    RGB tp_lit_last = glm::dot(-lit_sample.last.d, lit_sample.isect.normal)
+                              * lit_sample.isect.shape->brdf(lit_sample.last.d,
+                                                                -cam_to_light,
+                                                                lit_sample.pos);
+
+    RGB tp_full = tp_cp * tp_cam_last * tp_lit_last * tp_lp;
+
+    // accumulate full radiance of the path
+    rad += light.emission * tp_full;
+
+    // TODO: importance sample BRDF
+    // TODO: cast ray (check for path termination)
+    // TODO: update camera path throughput and camera path vertex
+  }
+
+  // QUESTION: how does one correctly weights those paths? remember that the
+  // importance sampling Monte Carlo integral is given by:
+  //
+  //  1   N   f(X_i)
+  // --- SUM --------
+  //  N   i   p(X_i)
+  //
+  // Which means we need to divide by the correct number of samples. This worked
+  // in the pathtracer above because each sample took only one path of each length;
+  // thus, f(X_i) was something of the form:
+  //
+  // f(X_i) = P_1(A_i) + P_2(B_i) + ... + P_n(C_i)
+  //
+  // where each P_i is an integral over paths of length i.
+  // When accumulated into the sample buffer and divided by N, we had exactly N
+  // samples for each integral, thus the estimative was right. In this case, our
+  // bd_path() function will collect many more paths as a single "sample".
+
+
+  return rad;
+}
+
+RGB Integrator::bdpt(const Scene& scene,
+                      const Ray& primary_ray,
+                      const Isect& isect)
+{
+  return bd_path(scene, primary_ray, isect, 3);
+}
+
+
 RGB Integrator::camera_path(const Scene& scene,
                             const Ray& primary_ray,
                             const Isect& isect, int path_length)
@@ -149,6 +278,8 @@ RGB Integrator::camera_path(const Scene& scene,
   Ray o_to_p = primary_ray;
 
   // this loop importance samples the BRDF
+  // TODO: next event estimation, which will make this loop compute all the subpaths
+  // up to path_length. only doing so we can russian roulette the path termination
   for(int i = 0; i < path_length-2; ++i)
   {
     // pick point by uniformly sampling hemisphere around p and tracing a ray
@@ -521,7 +652,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        rad = pathtracer(scene, primary_ray, isect);
+        //rad = pathtracer(scene, primary_ray, isect);
+        rad = bdpt(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
@@ -551,6 +683,9 @@ void Integrator::render(const Scene& scene)
   }
 }
 
+// ------------------------------------
+// ------------ Work later ------------
+// ------------------------------------
 void Integrator::light_path(const Scene& scene, int path_length)
 {
   // pick light source
