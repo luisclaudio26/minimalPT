@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <chrono>
 #include <thread>
+#include <vector>
 
 using namespace std::chrono;
 
@@ -132,90 +133,60 @@ RGB Integrator::bd_path(const Scene& scene,
     Isect isect; // intersection info
     Vec3 pos     // position of this vertex
     Ray last;    // the ray that upon intersection returned this vertex
+    bool valid;
   } Vertex;
   // ------------------------------
 
   // direct path from light source
-  if(path_length == 1) return isect.shape->emission;
+  if(path_length == 2) return isect.shape->emission;
 
-  // build paths of the same length, by building a camera path step to step
-  // and completing it with light paths of the needed size.
-  // if the camera path has length C and we need to build a path of length L,
-  // our light path must have size L-C-1 : L-C remaning edges, minus 1 (the
-  // the connection edge).
-  RGB rad(0.0f);
-  int n_paths = path_length - 1; // TODO: check this!
+  // vertex storage
+  std::vector<Vertex> vertices;
+  vertices.resize(2*path_length);
 
-  // TODO: in this first version we won't compute the path pdfs!
-  Vertex cam_sample; RGB tp_cp(1.0f);
-  cam_sample.pos = Vec3(primary_ray(isect.t) + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f));
-  cam_sample.isect = isect;
-  cam_sample.last = primary_ray;
+  // we start by filling the second vertex cell (as the first EDGE is fixed due
+  // to lens delta specular behavior).
+  int cp_idx = 1;
 
-  for(int cp = 1; cp < path_length; ++cp)
+  Vertex &first_v = vertices[cp_idx];
+  first_v.valid = true;
+  first_v.pos = primary_ray(isect.t)
+                  + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+  first_v.last = primary_ray;
+  first_v.isect = isect;
+
+  // keep sampling BRDF and building camera subpath
+  Isect cp_isect = isect;
+  Ray last_ray = primary_ray;
+
+  for(int i = 2; i <= path_length; ++i)
   {
-    // light subpath parameters.
-    // please read "lit" as "light" (needed in order
-    // to provide visually appealing identation [= )
-    Vertex lit_sample; RGB tp_lp(1.0f);
+    // last intersection point
+    Vec3 p = vertices[cp_idx].pos;
 
-    // randomly pick a light source and sample it.
-    // TODO: importance sample emitting power!
-    const int idx = rand() % scene.emissive_prims.size();
-    const Shape& light = scene.prims[ scene.emissive_prims[idx] ];
+    // sample BRDF for outgoing direction
+    float dir_pdf;
+    Vec3 out_dir = cp_isect.shape->sample_brdf(p, -last_ray.d, dir_pdf);
 
-    float lit_sample_pdf; Vec3 normal;
-    light.sample_surface(lit_sample.pos, normal, lit_sample_pdf);
+    // cast ray in the sampled direction
+    Ray to_next_point(p, out_dir); Isect next_isect;
+    if( !scene.cast_ray(to_next_point, next_isect) ) break; //TODO: Ray escaped. Do something.
 
-    // incrementally build light subpath, with as many edges as needed to
-    // compute a full path of length path_length.
-    int light_path_length = path_length-cp-1;
+    // store vertex
+    cp_idx += 1;
 
-    // TODO: light paths of length 0 should be used and final connection should
-    // be done using multiple importance sampling of BRDF/light sampling
-    if(light_path_length == 0) break;
-
-    // TODO: this first version will simply throw a ray in the normal direction
-    // of the light source.
-    Ray light_to_scene(lit_sample.pos, normal);
-    if( scene.cast_ray() ) // TODO: incomplete. what happens if this ray escapes
-                           // the scene? maybe try until the ray intersects
-                           // something, or do we sample the geometry?
-
-    for(int lp = 0; lp < light_path_length-1; ++lp)
-    {
-      // TODO: create light paths of increasing length starting from the light
-      // source sample.
-      //
-      // at the end of this loop, tp_lp must have the throughput accumulated of
-      // path_length-cp-2 bounces (the last one cannot be computed, as it is
-      // depends on the connection edge).
-    }
-
-    // connect paths
-    // final throughput is the product of the current throughputs, times the
-    // brdf.cos() terms in the last camera and light subpath vertices.
-    Vec3 cam_to_light = glm::normalize(lit_sample.pos - cam_sample.pos);
-
-    RGB tp_cam_last = glm::dot(cam_to_light, cam_sample.isect.normal)
-                              * cam_sample.isect.shape->brdf(cam_sample.last.d,
-                                                              cam_to_light,
-                                                              cam_sample.pos);
-
-    RGB tp_lit_last = glm::dot(-lit_sample.last.d, lit_sample.isect.normal)
-                              * lit_sample.isect.shape->brdf(lit_sample.last.d,
-                                                                -cam_to_light,
-                                                                lit_sample.pos);
-
-    RGB tp_full = tp_cp * tp_cam_last * tp_lit_last * tp_lp;
-
-    // accumulate full radiance of the path
-    rad += light.emission * tp_full;
-
-    // TODO: importance sample BRDF
-    // TODO: cast ray (check for path termination)
-    // TODO: update camera path throughput and camera path vertex
+    Vertex &v = vertices[cp_idx];
+    v.valid = true;
+    v.last = to_next_point;
+    v.isect = next_isect;
+    v.pos = to_next_point(next_isect.t)
+              + next_isect.normal*(next_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   }
+
+  // TODO: build light path of length path_length by sampling the brdf
+  //       and store vertices
+  // TODO: build full path by linking a prefix of the camera path with a suffix
+  //       of the light path. cast shadow ray to check for occlusions.
 
   // QUESTION: how does one correctly weights those paths? remember that the
   // importance sampling Monte Carlo integral is given by:
@@ -234,6 +205,16 @@ RGB Integrator::bd_path(const Scene& scene,
   // When accumulated into the sample buffer and divided by N, we had exactly N
   // samples for each integral, thus the estimative was right. In this case, our
   // bd_path() function will collect many more paths as a single "sample".
+  //
+  // ANSWER: the naïve approach is to simply average the path contributions; the
+  // strong of BDPT, however, is to multiple importance sample them.
+  //
+  // Overall, bidirectional pathtracing is the "ultimate" multiple importance
+  // sampling technique; while in regular pathtracing we combine two paths only
+  // (one where the last vertex comes from BRDF sampling and another from light
+  // sampling), here we combine up to N different paths, which cover a variety
+  // of hard sampling cases (such as specular materials, delta light sources,
+  // caustic paths, hard indirect lighting paths, etc.)
 
 
   return rad;
@@ -243,7 +224,7 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Ray& primary_ray,
                       const Isect& isect)
 {
-  return bd_path(scene, primary_ray, isect, 3);
+  return bd_path(scene, primary_ray, isect, 5);
 }
 
 

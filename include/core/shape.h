@@ -30,7 +30,7 @@ public:
   // material will be a simple Lambertian color
   Vec3 diff_color; MaterialType type; float eta;
   RGB brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
-  Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bool inner_surface = false) const;
+  Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const;
   float pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
 
   // Emission profile should be a radiance

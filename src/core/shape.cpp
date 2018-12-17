@@ -83,7 +83,7 @@ RGB Shape::brdf(const Vec3& in, const Vec3& out, const Vec3& p) const
   };
 }
 
-Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle, bool inner_surface) const
+Vec3 Shape::sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const
 {
   // normal is needed for all materials
   // QUESTION: how to flip normals in the case of sampling a BTDF
