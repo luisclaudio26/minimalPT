@@ -119,7 +119,6 @@ Integrator::Integrator()
   */
 }
 
-
 RGB Integrator::bd_path(const Scene& scene,
                         const Ray& primary_ray,
                         const Isect& isect,
@@ -130,8 +129,11 @@ RGB Integrator::bd_path(const Scene& scene,
   // ------------------------------
   typedef struct
   {
+    //float pdf; // it may be useful to store the pdf (solid angle) of selecting
+                 // the next vertex (or being selected by the last one)
+
     Isect isect; // intersection info
-    Vec3 pos     // position of this vertex
+    Vec3 pos;    // position of this vertex
     Ray last;    // the ray that upon intersection returned this vertex
     bool valid;
   } Vertex;
@@ -142,7 +144,8 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // vertex storage
   std::vector<Vertex> vertices;
-  vertices.resize(2*path_length);
+  //vertices.resize(2*path_length);
+  vertices.resize(path_length);
 
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
@@ -183,6 +186,29 @@ RGB Integrator::bd_path(const Scene& scene,
               + next_isect.normal*(next_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   }
 
+  // ----- TEST: build full path from the camera vertices -----
+  // compute path throughput and pdf
+  // Seems correct overall, but must take care of the escaping rays, which are
+  // doing some random thing!
+  RGB tp(1.0f); float path_pdf = 1.0f;
+
+  for(int i = 1; i < vertices.size()-1; ++i)
+  {
+    Vertex &cur = vertices[i];
+    Vertex &next = vertices[i+1];
+
+    RGB brdf = cur.isect.shape->brdf(-cur.last.d, next.last.d, cur.pos);
+
+    float cosTerm = glm::dot(cur.isect.normal, next.last.d);
+    if( cur.isect.shape->type == GLASS ) cosTerm *= -1.0f;
+
+    path_pdf *= cur.isect.shape->pdf_brdf(-cur.last.d, next.last.d, cur.pos);
+    tp *= brdf * cosTerm;
+  }
+
+  return tp*vertices.end()->isect.shape->emission * (1.0f / path_pdf);
+  // ----------------------------------------------------------
+
   // TODO: build light path of length path_length by sampling the brdf
   //       and store vertices
   // TODO: build full path by linking a prefix of the camera path with a suffix
@@ -217,16 +243,15 @@ RGB Integrator::bd_path(const Scene& scene,
   // caustic paths, hard indirect lighting paths, etc.)
 
 
-  return rad;
+  //return RGB(0.1f);
 }
 
 RGB Integrator::bdpt(const Scene& scene,
                       const Ray& primary_ray,
                       const Isect& isect)
 {
-  return bd_path(scene, primary_ray, isect, 5);
+  return bd_path(scene, primary_ray, isect, 3);
 }
-
 
 RGB Integrator::camera_path(const Scene& scene,
                             const Ray& primary_ray,
@@ -326,6 +351,10 @@ RGB Integrator::camera_path(const Scene& scene,
   RGB rad_brdf = di_brdf * throughput;
   float pdf_brdf = path_pdf * brdf_pdf;
 
+  // --- TEST ---
+  return rad_brdf * (1.0f / pdf_brdf);
+  // ------------
+
   // if material has specular properties, it is in general useless to sample
   // the light sources, as this will return paths with pdf zero which will NaN
   // the output. if this is the case, simply return the BRDF sampling path.
@@ -357,12 +386,14 @@ RGB Integrator::pathtracer(const Scene& scene,
   // is always darker than it should
   const int max_length = 5;
 
+  /*
   RGB rad(0.0f);
-
   for(int i = 0; i <= max_length; ++i)
     rad += camera_path(scene, primary_ray, isect, i);
-
   return rad;
+  */
+
+  return camera_path(scene, primary_ray, isect, 2);
 }
 
 RGB Integrator::normal_shading(const Scene& scene,
