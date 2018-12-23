@@ -132,11 +132,9 @@ RGB Integrator::bd_path(const Scene& scene,
     Isect isect; // intersection info
     Vec3 pos;    // position of this vertex
     Ray last;    // the ray that upon intersection returned this vertex
-    bool valid;
+    float pdf;   // PDF (solid angle) of being selected by the last vertex
 
-    // it may be useful to store the pdf (solid angle) of selecting
-    // the next vertex (or being selected by the last one)
-    float pdf; // TODO: 32-bytes variables won't work here, but shorter ones will. O_O
+    bool valid;
   } Vertex;
   // ------------------------------
 
@@ -154,7 +152,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // TODO: well, this is weird...erasing this and having the PDF variable on
   // the Vertex struct results in seg fault.
-  //printf("%ld ", sizeof(Vertex));
+  //printf("(%ld %ld %ld %ld %ld) ", sizeof(Vertex), sizeof(Isect), sizeof(Vec3), sizeof(const Shape*), sizeof(Ray));
 
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
@@ -166,13 +164,13 @@ RGB Integrator::bd_path(const Scene& scene,
                   + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   first_v.last = primary_ray;
   first_v.isect = isect;
-  first_v.pdf = 1.0f; // TODO: review this
+  first_v.pdf = 1.0f; // TODO: review this. should be pdf of the lens sample (?)
 
   // keep sampling BRDF and building camera subpath
   Isect cp_isect = isect;
   Ray last_ray = primary_ray;
 
-  for(int i = 2; i <= path_length; ++i)
+  for(int i = 2; i < path_length; ++i)
   {
     // last intersection point
     Vec3 p = vertices[cp_idx].pos;
@@ -220,12 +218,16 @@ RGB Integrator::bd_path(const Scene& scene,
 
     // path pdf is the product of the pdf of sampling each vertex.
     // TODO: include probability of the first vertex! (lens sample)
-    //path_pdf *= cur.isect.shape->pdf_brdf(-cur.last.d, next.last.d, cur.pos);
     path_pdf *= cur.pdf;
   }
 
-  path_pdf *= vertices.end()->pdf;
-  return (tp * vertices.end()->isect.shape->emission) * (1.0f / path_pdf);
+  Vertex &v = vertices[path_length-1];
+  if( v.valid )
+  {
+    RGB emission = v.isect.shape->emission;
+    return (tp * emission) * (1.0f / path_pdf);
+  }
+  else return RGB(0.0f);
   // ----------------------------------------------------------
 
   // TODO: build light path of length path_length by sampling the brdf
