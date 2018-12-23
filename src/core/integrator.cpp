@@ -225,6 +225,8 @@ RGB Integrator::bd_path(const Scene& scene,
   if( v.valid )
   {
     RGB emission = v.isect.shape->emission;
+    path_pdf *= v.pdf;
+
     return (tp * emission) * (1.0f / path_pdf);
   }
   else return RGB(0.0f);
@@ -685,8 +687,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        //rad = pathtracer(scene, primary_ray, isect);
-        rad = bdpt(scene, primary_ray, isect);
+        rad = pathtracer(scene, primary_ray, isect);
+        //rad = bdpt(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
