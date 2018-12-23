@@ -129,13 +129,14 @@ RGB Integrator::bd_path(const Scene& scene,
   // ------------------------------
   typedef struct
   {
-    //float pdf; // it may be useful to store the pdf (solid angle) of selecting
-                 // the next vertex (or being selected by the last one)
-
     Isect isect; // intersection info
     Vec3 pos;    // position of this vertex
     Ray last;    // the ray that upon intersection returned this vertex
     bool valid;
+
+    // it may be useful to store the pdf (solid angle) of selecting
+    // the next vertex (or being selected by the last one)
+    float pdf; // TODO: 32-bytes variables won't work here, but shorter ones will. O_O
   } Vertex;
   // ------------------------------
 
@@ -144,8 +145,16 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // vertex storage
   std::vector<Vertex> vertices;
-  //vertices.resize(2*path_length);
   vertices.resize(path_length);
+  for( auto& v : vertices )
+  {
+    v.valid = false;
+    v.pdf = 1.0f;
+  }
+
+  // TODO: well, this is weird...erasing this and having the PDF variable on
+  // the Vertex struct results in seg fault.
+  //printf("%ld ", sizeof(Vertex));
 
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
@@ -157,6 +166,7 @@ RGB Integrator::bd_path(const Scene& scene,
                   + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   first_v.last = primary_ray;
   first_v.isect = isect;
+  first_v.pdf = 1.0f; // TODO: review this
 
   // keep sampling BRDF and building camera subpath
   Isect cp_isect = isect;
@@ -180,6 +190,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
     Vertex &v = vertices[cp_idx];
     v.valid = true;
+    v.pdf = dir_pdf;
     v.last = to_next_point;
     v.isect = next_isect;
     v.pos = to_next_point(next_isect.t)
@@ -197,16 +208,24 @@ RGB Integrator::bd_path(const Scene& scene,
     Vertex &cur = vertices[i];
     Vertex &next = vertices[i+1];
 
+    // do not compute any contribution if this path has not the proper length
+    if( !cur.valid || !next.valid ) tp = RGB(0.0f);
+
+    // BRDF and cosine terms
     RGB brdf = cur.isect.shape->brdf(-cur.last.d, next.last.d, cur.pos);
 
     float cosTerm = glm::dot(cur.isect.normal, next.last.d);
     if( cur.isect.shape->type == GLASS ) cosTerm *= -1.0f;
-
-    path_pdf *= cur.isect.shape->pdf_brdf(-cur.last.d, next.last.d, cur.pos);
     tp *= brdf * cosTerm;
+
+    // path pdf is the product of the pdf of sampling each vertex.
+    // TODO: include probability of the first vertex! (lens sample)
+    //path_pdf *= cur.isect.shape->pdf_brdf(-cur.last.d, next.last.d, cur.pos);
+    path_pdf *= cur.pdf;
   }
 
-  return tp*vertices.end()->isect.shape->emission * (1.0f / path_pdf);
+  path_pdf *= vertices.end()->pdf;
+  return (tp * vertices.end()->isect.shape->emission) * (1.0f / path_pdf);
   // ----------------------------------------------------------
 
   // TODO: build light path of length path_length by sampling the brdf
