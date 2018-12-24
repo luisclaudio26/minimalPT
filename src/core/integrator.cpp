@@ -8,6 +8,54 @@
 using namespace std::chrono;
 
 // --------------------------------------------------------------------
+// ------------------------- Testing stuff ----------------------------
+// --------------------------------------------------------------------
+
+// ----- TEST: build full path from the camera vertices -----
+// compute path throughput and pdf
+// Seems correct overall, but must take care of the escaping rays, which are
+// doing some random thing!
+/*
+RGB tp(1.0f); float path_pdf = 1.0f;
+
+for(int i = 1; i < vertices.size()-1; ++i)
+{
+  Vertex &cur = vertices[i];
+  Vertex &next = vertices[i+1];
+
+  // do not compute any contribution if this path has not the proper length
+  if( !cur.valid || !next.valid ) tp = RGB(0.0f);
+
+  // BRDF and cosine terms
+  RGB brdf = cur.isect.shape->brdf(-cur.last.d, next.last.d, cur.pos);
+
+  float cosTerm = glm::dot(cur.isect.normal, next.last.d);
+  if( cur.isect.shape->type == GLASS ) cosTerm *= -1.0f;
+  tp *= brdf * cosTerm;
+
+  // path pdf is the product of the pdf of sampling each vertex.
+  // TODO: include probability of the first vertex! (lens sample)
+  path_pdf *= cur.pdf;
+}
+
+Vertex &v = vertices[path_length-1];
+if( v.valid )
+{
+  RGB emission = v.isect.shape->emission;
+  path_pdf *= v.pdf;
+
+  return (tp * emission) * (1.0f / path_pdf);
+}
+else return RGB(0.0f);
+*/
+
+
+
+// ----------------------------------------------------------
+
+// --------------------------------------------------------------------
+
+// --------------------------------------------------------------------
 // ------------------ Pathtracing helper functions --------------------
 // --------------------------------------------------------------------
 static RGB sample_light(const Ray& primary_ray,
@@ -143,17 +191,14 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // vertex storage
   std::vector<Vertex> vertices;
-  vertices.resize(path_length);
+  vertices.resize(2*path_length);
   for( auto& v : vertices )
   {
     v.valid = false;
     v.pdf = 1.0f;
   }
 
-  // TODO: well, this is weird...erasing this and having the PDF variable on
-  // the Vertex struct results in seg fault.
-  //printf("(%ld %ld %ld %ld %ld) ", sizeof(Vertex), sizeof(Isect), sizeof(Vec3), sizeof(const Shape*), sizeof(Ray));
-
+  // ------------------ Camera path --------------------
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
   int cp_idx = 1;
@@ -194,46 +239,34 @@ RGB Integrator::bd_path(const Scene& scene,
     v.pos = to_next_point(next_isect.t)
               + next_isect.normal*(next_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   }
-
-  // ----- TEST: build full path from the camera vertices -----
-  // compute path throughput and pdf
-  // Seems correct overall, but must take care of the escaping rays, which are
-  // doing some random thing!
-  RGB tp(1.0f); float path_pdf = 1.0f;
-
-  for(int i = 1; i < vertices.size()-1; ++i)
-  {
-    Vertex &cur = vertices[i];
-    Vertex &next = vertices[i+1];
-
-    // do not compute any contribution if this path has not the proper length
-    if( !cur.valid || !next.valid ) tp = RGB(0.0f);
-
-    // BRDF and cosine terms
-    RGB brdf = cur.isect.shape->brdf(-cur.last.d, next.last.d, cur.pos);
-
-    float cosTerm = glm::dot(cur.isect.normal, next.last.d);
-    if( cur.isect.shape->type == GLASS ) cosTerm *= -1.0f;
-    tp *= brdf * cosTerm;
-
-    // path pdf is the product of the pdf of sampling each vertex.
-    // TODO: include probability of the first vertex! (lens sample)
-    path_pdf *= cur.pdf;
-  }
-
-  Vertex &v = vertices[path_length-1];
-  if( v.valid )
-  {
-    RGB emission = v.isect.shape->emission;
-    path_pdf *= v.pdf;
-
-    return (tp * emission) * (1.0f / path_pdf);
-  }
-  else return RGB(0.0f);
-  // ----------------------------------------------------------
-
+  // ----------------------- Light path --------------------------
   // TODO: build light path of length path_length by sampling the brdf
-  //       and store vertices
+  //       and store vertices from back to front inside the vertex cache
+  int lp_idx = vertices.size() - 1;
+
+  // randomly pick a lightsource...
+  const int l_idx = rand() % scene.emissive_prims.size();
+  const Shape& l = scene.prims[ scene.emissive_prims[l_idx] ];
+
+  // ... and sample a point on its surface
+  Vec3 l_q, l_n;   // sampled point q and normal at q
+  float l_pdf;  // probability of choosing q on the surface of l
+  l.sample_surface(l_q, l_n, l_pdf);
+
+  // this is our first vertex. push it to the vertex list.
+  Vertex &last_v = vertices[lp_idx];
+  last_v.valid = true;
+  last_v.pos = l_q;
+  last_v.last = Ray( Vec3(0.0f), Vec3(0.0f) ); // there's no last ray for the first vertex in a light path
+  //last_v.isect = l_isect; // TODO: make sample_surface return an intersection. its better overall.
+  last_V.pdf = l_pdf; // remember this is the ONLY pdf that will be in the
+                      // SURFACE AREA domain, so we must convert it when computing
+                      // the paths in the end.
+
+  // TODO: keep sampling BRDF and building light subpath
+  //       this will not be much different than the camera subpath construction.
+
+  // --------------------------------------------------------------
   // TODO: build full path by linking a prefix of the camera path with a suffix
   //       of the light path. cast shadow ray to check for occlusions.
 
@@ -687,8 +720,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        rad = pathtracer(scene, primary_ray, isect);
-        //rad = bdpt(scene, primary_ray, isect);
+        //rad = pathtracer(scene, primary_ray, isect);
+        rad = bdpt(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
