@@ -181,8 +181,7 @@ RGB Integrator::bd_path(const Scene& scene,
     Vec3 pos;    // position of this vertex
     Ray last;    // the ray that upon intersection returned this vertex
     float pdf;   // PDF (solid angle) of being selected by the last vertex
-
-    bool valid;
+    bool valid;  // is this vertex valid or not?
   } Vertex;
   // ------------------------------
 
@@ -226,7 +225,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
     // cast ray in the sampled direction
     Ray to_next_point(p, out_dir); Isect next_isect;
-    if( !scene.cast_ray(to_next_point, next_isect) ) break; //TODO: Ray escaped. Do something.
+    if( !scene.cast_ray(to_next_point, next_isect) ) break; //TODO: Ray escaped. Do something?
 
     // store vertex
     cp_idx += 1;
@@ -240,31 +239,104 @@ RGB Integrator::bd_path(const Scene& scene,
               + next_isect.normal*(next_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   }
   // ----------------------- Light path --------------------------
-  // TODO: build light path of length path_length by sampling the brdf
-  //       and store vertices from back to front inside the vertex cache
-  int lp_idx = vertices.size() - 1;
-
-  // randomly pick a lightsource...
+  // randomly pick a lightsource and sample a point on its surface
   const int l_idx = rand() % scene.emissive_prims.size();
   const Shape& l = scene.prims[ scene.emissive_prims[l_idx] ];
+  Vec3 l_p, l_n;   // sampled point q and normal at q
+  float l_pdf;     // probability of choosing q on the surface of l
+                   // TODO: this will be biased if we have more than one light source!
+                   // must consider the case where there's more than one light source,
+                   // where the probability of picking a point is 1.0f / A, where A
+                   // is the total surface area of the light sources (and we importance
+                   // sample the area, also).
+  l.sample_surface(l_p, l_n, l_pdf);
 
-  // ... and sample a point on its surface
-  Vec3 l_q, l_n;   // sampled point q and normal at q
-  float l_pdf;  // probability of choosing q on the surface of l
-  l.sample_surface(l_q, l_n, l_pdf);
+  // unlike the lens sample, we'll need to store at least partial info on the
+  // light sample because we need it explicitly for the radiance computation step.
+  Vertex &last = vertices[vertices.size()-1];
+  last.valid = true;
+  last.pdf = l_pdf; // PDF in respect to surface area. must convert it after!
+  last.pos = l_p;
+  last.isect.normal = l_n;
+  last.isect.shape = &l;
 
-  // this is our first vertex. push it to the vertex list.
+  // cast ray from this sample and find the first intersection
+  Vec3 l_d = l_n; // TODO: actually sample hemisphere around l_p!!!
+  Ray l_ray( l_p, l_d ); Isect l_isect;
+
+  //TODO: DO SOMETHING IF WE MISSED THIS RAY. Camera subpath has the same issue.
+  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(1.0f, 0.0f, 0.0f);
+
+  // fill the last but one vertex
+  int lp_idx = vertices.size()-2;
+
   Vertex &last_v = vertices[lp_idx];
   last_v.valid = true;
-  last_v.pos = l_q;
-  last_v.last = Ray( Vec3(0.0f), Vec3(0.0f) ); // there's no last ray for the first vertex in a light path
-  //last_v.isect = l_isect; // TODO: make sample_surface return an intersection. its better overall.
-  last_V.pdf = l_pdf; // remember this is the ONLY pdf that will be in the
-                      // SURFACE AREA domain, so we must convert it when computing
-                      // the paths in the end.
+  last_v.pdf = 1.0f; //TODO: because we used the normal direction
+  last_v.last = l_ray;
+  last_v.isect = l_isect;
+  last_v.pos = l_ray(l_isect.t)
+                + l_isect.normal*(l_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
 
-  // TODO: keep sampling BRDF and building light subpath
-  //       this will not be much different than the camera subpath construction.
+  // build light subpath by sampling BRDFs
+  for(int i = 2; i < path_length; ++i)
+  {
+    // get current vertex, its position and sample BRDF
+    Vertex &cur = vertices[lp_idx];
+    Vec3 p = cur.pos;
+
+    float pdf_dir;
+    Vec3 out_dir = cur.isect.shape->sample_brdf(p, -cur.last.d, pdf_dir);
+
+    // cast ray in this direction to get next vertex
+    Ray next_ray(p, out_dir); Isect next_isect;
+    if( !scene.cast_ray(next_ray, next_isect) ) break; //TODO: ray escaped. do something?
+
+    // store vertex info
+    lp_idx -= 1;
+
+    Vertex &next = vertices[lp_idx];
+    next.valid = true;
+    next.pdf = pdf_dir;
+    next.last = next_ray;
+    next.isect = next_isect;
+    next.pos = next_ray(next_isect.t)
+                + next_isect.normal*(next_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+  }
+
+  // ----------------- TEST LIGHT PATH ------------------
+  // 1. Link the first two vertices of the camera subpath with the last one. This
+  // should be equivalent to light sampling.
+  RGB tp(1.0f); float path_pdf = 1.0f;
+  Vertex &v_last = vertices[vertices.size()-1];
+  Vertex &v = vertices[1];
+
+  // try to connect paths
+  Vec3 v2l_ = v_last.pos - v.pos;
+  float d2 = glm::dot(v2l_, v2l_);
+  Vec3 v2l = glm::normalize(v2l_);
+
+  // this seems to work, but may cause problems with the light sources themselves
+  Ray shadow_ray(v.pos, v2l); Isect shadow_isect;
+  scene.cast_ray(shadow_ray, shadow_isect);
+  float vis = glm::length(shadow_ray(shadow_isect.t)-v_last.pos) < 0.00001f ? 1.0f : 0.0f;
+
+  // vertices actually see each other. compute contribution.
+  RGB brdf = v.isect.shape->brdf(-v.last.d, v2l, v.pos);
+
+  float cosTerm = glm::dot(v.isect.normal, v2l);
+  if( v.isect.shape->type == GLASS ) cosTerm *= -1.0f;
+
+        tp *= brdf * cosTerm;
+  path_pdf *= v_last.pdf * d2 / glm::dot(v_last.isect.normal, -v2l);
+
+  return vis*(v_last.isect.shape->emission * tp) * (1.0f/path_pdf);
+
+  // 2. Link the first two vertices of the camera subpath with the first vertex
+  // of the light subpath. This should give a 5 vertex path (when path_length = 3).
+
+
+  // ----------------------------------------------------
 
   // --------------------------------------------------------------
   // TODO: build full path by linking a prefix of the camera path with a suffix
@@ -407,15 +479,14 @@ RGB Integrator::camera_path(const Scene& scene,
   RGB rad_brdf = di_brdf * throughput;
   float pdf_brdf = path_pdf * brdf_pdf;
 
-  // --- TEST ---
-  return rad_brdf * (1.0f / pdf_brdf);
-  // ------------
-
   // if material has specular properties, it is in general useless to sample
   // the light sources, as this will return paths with pdf zero which will NaN
   // the output. if this is the case, simply return the BRDF sampling path.
+
+  /* ---- TEST ----
   if( isect_p.shape->type == GLASS || isect_p.shape->type == DELTA )
     return rad_brdf * (1.0f / pdf_brdf);
+     -------------- */
 
   // sample light sources. reaching this point means that the material is
   // glossy/diffuse (non-delta)
@@ -423,6 +494,10 @@ RGB Integrator::camera_path(const Scene& scene,
   RGB di_ls = sample_light(o_to_p, isect_p, scene, light_pdf);
   RGB rad_ls = di_ls * throughput;
   float pdf_ls = path_pdf * light_pdf;
+
+  // --- TEST ---
+  return rad_ls * (1.0f / pdf_ls);
+  // ------------
 
   // Power heuristic for multiple importance sampling
   float over_sum_pdfs = 1.0f / (pdf_ls*pdf_ls + pdf_brdf*pdf_brdf);
