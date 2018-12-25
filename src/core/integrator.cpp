@@ -262,7 +262,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // cast ray from this sample and find the first intersection
   Vec3 l_d = l_n; // TODO: actually sample hemisphere around l_p!!!
-  Ray l_ray( l_p, l_d ); Isect l_isect;
+  Ray l_ray( l_p + 0.0001f*l_n, l_d ); Isect l_isect;
 
   //TODO: DO SOMETHING IF WE MISSED THIS RAY. Camera subpath has the same issue.
   if( !scene.cast_ray(l_ray, l_isect) ) return RGB(1.0f, 0.0f, 0.0f);
@@ -307,6 +307,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // ----------------- TEST LIGHT PATH ------------------
   // 1. Link the first two vertices of the camera subpath with the last one. This
   // should be equivalent to light sampling.
+  /*
   RGB tp(1.0f); float path_pdf = 1.0f;
   Vertex &v_last = vertices[vertices.size()-1];
   Vertex &v = vertices[1];
@@ -331,10 +332,67 @@ RGB Integrator::bd_path(const Scene& scene,
   path_pdf *= v_last.pdf * d2 / glm::dot(v_last.isect.normal, -v2l);
 
   return vis*(v_last.isect.shape->emission * tp) * (1.0f/path_pdf);
+  */
 
   // 2. Link the first two vertices of the camera subpath with the first vertex
   // of the light subpath. This should give a 5 vertex path (when path_length = 3).
 
+  // discard path if it is not complete!
+  const int vertex_l = vertices.size()/2;
+  Vertex &v_l = vertices[vertex_l];
+  Vertex &v_c = vertices[1];
+
+  if( !v_l.valid || !v_c.valid ) return RGB(1.0f, 0.0f, 0.0f);
+
+  // try to connect paths
+  Vec3 v2l_ = v_l.pos - v_c.pos;
+  float d2 = glm::dot(v2l_, v2l_);
+  Vec3 v2l = glm::normalize(v2l_);
+
+  // this seems to work, but may cause problems with the light sources themselves
+  Ray shadow_ray(v_c.pos, v2l); Isect shadow_isect;
+  scene.cast_ray(shadow_ray, shadow_isect);
+  float vis = glm::length(shadow_ray(shadow_isect.t)-v_l.pos) < 0.001f ? 1.0f : 0.0f;
+
+  // vertices actually see each other. compute contribution.
+  // throughput at path junction
+  RGB brdf_v_c = v_c.isect.shape->brdf(-v_c.last.d, v2l, v_c.pos);
+  float cosVC = glm::dot(v_c.isect.normal, v2l);
+  if( v_c.isect.shape->type == GLASS ) cosVC *= -1.0f;
+
+  RGB brdf_v_l = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
+  float cosVL = glm::dot(v_l.isect.normal, -v_l.last.d);
+  if( v_l.isect.shape->type == GLASS ) cosVL *= -1.0f;
+
+  // throughput for the rest of the light path.
+  //
+  // we compute this throughput in the OPPOSITE sense then what is computed
+  // in the light subpath construction!
+  //
+  // also, there's no need for shadow ray the last vertex as it is guaranteed
+  // to be visible by construction.
+  RGB tp_lp(1.0f); Ray from_cam = -shadow_ray;
+  for(int i = vertex_l+1; i < vertices.size()-1; ++i)
+  {
+    Vertex &cur = vertices[i];
+
+    // update throughput
+    RGB brdf = cur.isect.shape->brdf(from_cam.d, -cur.last.d, cur.pos);
+    float cosTerm = glm::dot(cur.isect.normal, -cur.last.d);
+    if( cur.isect.shape->type == GLASS ) cosTerm *= -1.0f;
+
+    tp_lp *= cosTerm * brdf;
+
+    // update variables for next loop
+    from_cam = cur.last;
+  }
+
+  // throughput of the whole path. the final version of this must also compute
+  // the throughput of the camera subpath!
+  RGB tp = (brdf_v_c*cosVC) * (brdf_v_l*cosVL) * tp_lp;
+  RGB e = vertices[vertices.size()-1].isect.shape->emission;
+
+  return vis * e * tp;
 
   // ----------------------------------------------------
 
@@ -524,7 +582,7 @@ RGB Integrator::pathtracer(const Scene& scene,
   return rad;
   */
 
-  return camera_path(scene, primary_ray, isect, 2);
+  return camera_path(scene, primary_ray, isect, 3);
 }
 
 RGB Integrator::normal_shading(const Scene& scene,
