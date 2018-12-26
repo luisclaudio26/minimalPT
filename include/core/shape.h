@@ -18,6 +18,16 @@ public:
   // we'll handle spheres only at first!
   Vec3 o; float r;
 
+  // material will be a simple Lambertian color
+  Vec3 diff_color; MaterialType type; float eta;
+  RGB brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
+  Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const;
+  float pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
+
+  // geometry related stuff
+  bool intersect(const Ray& r, Isect& tgt) const;
+  void sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const;
+
   // compute coordinate system around an specific normal.
   // we do this by simply taking a perpendicular vector on the plane
   // defined by the normal and the xaxis. If they're parallel, we use
@@ -26,12 +36,6 @@ public:
   // constructor acts column-wise, thus each column of the matrix is
   // one of the basis vectors).
   glm::mat3 get_local_coordinate_system(const Vec3& normal) const;
-
-  // material will be a simple Lambertian color
-  Vec3 diff_color; MaterialType type; float eta;
-  RGB brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
-  Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const;
-  float pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
 
   // Emission profile should be a radiance
   // function Le(x,d) that tells us how much power
@@ -56,8 +60,11 @@ public:
   // Lambert's cosine law.
   Vec3 emission; //in W.m⁻².sr⁻¹
 
-  bool intersect(const Ray& r, Isect& tgt) const;
-  void sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const;
+  // sample this shape as an area light source.
+  // TODO: include flags for diffuse/directional and more things related to
+  // the lightfield emitted by the shape.
+  void sample_as_light(Vec3& p, float& pdf_p,
+                        Vec3& dir, float &pdf_dir, Vec3& n) const;
 };
 
 #endif

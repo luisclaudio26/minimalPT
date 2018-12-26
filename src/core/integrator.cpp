@@ -240,39 +240,41 @@ RGB Integrator::bd_path(const Scene& scene,
   }
   // ----------------------- Light path --------------------------
   // randomly pick a lightsource and sample a point on its surface
+  // TODO: this will be biased if we have more than one light source!
+  // must consider the case where there's more than one light source,
+  // where the probability of picking a point is 1.0f / A, where A
+  // is the total surface area of the light sources (and we importance
+  // sample the area, also).
   const int l_idx = rand() % scene.emissive_prims.size();
   const Shape& l = scene.prims[ scene.emissive_prims[l_idx] ];
-  Vec3 l_p, l_n;   // sampled point q and normal at q
-  float l_pdf;     // probability of choosing q on the surface of l
-                   // TODO: this will be biased if we have more than one light source!
-                   // must consider the case where there's more than one light source,
-                   // where the probability of picking a point is 1.0f / A, where A
-                   // is the total surface area of the light sources (and we importance
-                   // sample the area, also).
-  l.sample_surface(l_p, l_n, l_pdf);
+  Vec3 l_p; float l_p_pdf; // we're sampling radiance, thus a point
+  Vec3 l_d; float l_d_pdf; // on the surface and a direction
+  Vec3 l_n;
+  l.sample_as_light(l_p, l_p_pdf, l_d, l_d_pdf, l_n);
 
   // unlike the lens sample, we'll need to store at least partial info on the
   // light sample because we need it explicitly for the radiance computation step.
   Vertex &last = vertices[vertices.size()-1];
   last.valid = true;
-  last.pdf = l_pdf; // PDF in respect to surface area. must convert it after!
+  last.pdf = l_p_pdf;
   last.pos = l_p;
   last.isect.normal = l_n;
   last.isect.shape = &l;
 
   // cast ray from this sample and find the first intersection
-  Vec3 l_d = l_n; // TODO: actually sample hemisphere around l_p!!!
   Ray l_ray( l_p + 0.0001f*l_n, l_d ); Isect l_isect;
 
   //TODO: DO SOMETHING IF WE MISSED THIS RAY. Camera subpath has the same issue.
-  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(1.0f, 0.0f, 0.0f);
+  // for the specific case of the light path having size 1, we could simply skip
+  // and work with the light sample only
+  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f, 0.0f, 0.0f);
 
   // fill the last but one vertex
   int lp_idx = vertices.size()-2;
 
   Vertex &last_v = vertices[lp_idx];
   last_v.valid = true;
-  last_v.pdf = 1.0f; //TODO: because we used the normal direction
+  last_v.pdf = l_d_pdf * glm::dot(l_isect.normal, -l_d) / l_isect.d2;
   last_v.last = l_ray;
   last_v.isect = l_isect;
   last_v.pos = l_ray(l_isect.t)
@@ -345,7 +347,8 @@ RGB Integrator::bd_path(const Scene& scene,
   Vertex &v_l = vertices[vertex_l];
   Vertex &v_c = vertices[1];
 
-  if( !v_l.valid || !v_c.valid ) return RGB(1.0f, 0.0f, 0.0f);
+  if( !v_l.valid ) return RGB(1.0f, 1.0f, 0.0f);
+  if( !v_c.valid ) return RGB(0.0f, 1.0f, 1.0f);
 
   // try to connect paths
   Vec3 v2l_ = v_l.pos - v_c.pos;
@@ -357,7 +360,13 @@ RGB Integrator::bd_path(const Scene& scene,
   scene.cast_ray(shadow_ray, shadow_isect);
   float vis = glm::length(shadow_ray(shadow_isect.t)-v_l.pos) < 0.001f ? 1.0f : 0.0f;
 
+  return RGB(vis);
+
   // vertices actually see each other. compute contribution.
+  // There's no PDF for the junction! the probability of picking this specific
+  // path depends only on the probability of selecting the vertices. there's no
+  // meaning in computing PDF for the junction, as once we build the subpaths,
+  // we have chance 1 of connecting them, let's say (?)
   // throughput at path junction
   RGB brdf_v_c = v_c.isect.shape->brdf(-v_c.last.d, v2l, v_c.pos);
   float cosVC = glm::dot(v_c.isect.normal, v2l);
@@ -367,11 +376,6 @@ RGB Integrator::bd_path(const Scene& scene,
   float cosVL = glm::dot(v_l.isect.normal, -v_l.last.d);
   if( v_l.isect.shape->type == GLASS ) cosVL *= -1.0f;
 
-  // pdf of path junction
-  // TODO: this seems to be the problem!!
-  float pdf_junction_angle = v_c.isect.shape->pdf_brdf(-v_c.last.d, v2l, v_c.pos);
-  float pdf_junction = pdf_junction_angle * glm::dot(v_l.isect.normal, -v2l) / shadow_isect.d2;
-
   // throughput for the rest of the light path.
   //
   // we compute this throughput in the OPPOSITE sense then what is computed
@@ -380,6 +384,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // also, there's no need for shadow ray the last vertex as it is guaranteed
   // to be visible by construction.
   RGB tp_lp(1.0f); Ray from_cam = -shadow_ray;
+  /*
   for(int i = vertex_l+1; i < vertices.size()-1; ++i)
   {
     Vertex &cur = vertices[i];
@@ -394,6 +399,7 @@ RGB Integrator::bd_path(const Scene& scene,
     // update variables for next loop
     from_cam = cur.last;
   }
+  */
 
   // run through the lightpath accumulating its pdf
   float pdf_lp = 1.0f;
@@ -407,7 +413,7 @@ RGB Integrator::bd_path(const Scene& scene,
   RGB tp = (brdf_v_c*cosVC) * (brdf_v_l*cosVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
-  return vis * e * tp * (1.0f / pdf);
+  return vis * e * tp; //* (1.0f / pdf);
 
   // ----------------------------------------------------
 
@@ -555,11 +561,10 @@ RGB Integrator::camera_path(const Scene& scene,
   // if material has specular properties, it is in general useless to sample
   // the light sources, as this will return paths with pdf zero which will NaN
   // the output. if this is the case, simply return the BRDF sampling path.
-
-  /* ---- TEST ----
+  /* ----- TEST -----
   if( isect_p.shape->type == GLASS || isect_p.shape->type == DELTA )
     return rad_brdf * (1.0f / pdf_brdf);
-     -------------- */
+     ---------------- */
 
   // sample light sources. reaching this point means that the material is
   // glossy/diffuse (non-delta)
@@ -568,9 +573,8 @@ RGB Integrator::camera_path(const Scene& scene,
   RGB rad_ls = di_ls * throughput;
   float pdf_ls = path_pdf * light_pdf;
 
-  // --- TEST ---
-  return rad_ls * (1.0f / pdf_ls);
-  // ------------
+  // ------ TEST -------
+  return rad_ls; //* (1.0f / pdf_ls);
 
   // Power heuristic for multiple importance sampling
   float over_sum_pdfs = 1.0f / (pdf_ls*pdf_ls + pdf_brdf*pdf_brdf);

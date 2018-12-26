@@ -28,9 +28,11 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   // if we reached this point, t > 0.0f and thus we have a valid intersection.
   // but we are not checking whether we're inside the sphere or not!
   tgt.t = t;
-  tgt.d2 = glm::dot(oc, oc);
   tgt.shape = this;
-  tgt.normal = glm::normalize(ray(t)-this->o);
+  tgt.normal = glm::normalize(ray(t) - o);
+
+  Vec3 ot = ray.o - ray(t);
+  tgt.d2 = glm::dot(ot, ot);
 
   // flip normals if the origin of the ray is inside the sphere:
   // ||oc|| < r  =>  <oc,oc> < r²  =>  <oc,oc> - r² < 0   =>   c < 0
@@ -184,4 +186,21 @@ void Shape::sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const
   normal = q;
   point = q*this->r + this->o;
   pdf_area = 1.0f / (4.0f * 3.141592654f * this->r * this->r);
+}
+
+void Shape::sample_as_light(Vec3& p, float& pdf_p,
+                            Vec3& dir, float &pdf_dir,
+                            Vec3& n) const
+{
+  // pick uniformly distributed point on sphere
+  sample_surface(p, n, pdf_p);
+
+  // pick uniformly distributed point on hemisphere of directions around p.
+  // everything's uniform because we assume it to be a DIFFUSE light source!
+  Vec3 dir_ts;
+  Sampler::sample_hemisphere(dir_ts, pdf_dir);
+
+  // get direction in world coordinates
+  glm::mat3 local2world = get_local_coordinate_system(n);
+  dir = local2world * dir_ts;
 }
