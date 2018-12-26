@@ -292,16 +292,19 @@ RGB Integrator::bd_path(const Scene& scene,
     Ray next_ray(p, out_dir); Isect next_isect;
     if( !scene.cast_ray(next_ray, next_isect) ) break; //TODO: ray escaped. do something?
 
+    // convert pdf from solid angle to surface area units
+    float pdf_surface = pdf_dir * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
+
     // store vertex info
     lp_idx -= 1;
 
     Vertex &next = vertices[lp_idx];
     next.valid = true;
-    next.pdf = pdf_dir;
     next.last = next_ray;
     next.isect = next_isect;
     next.pos = next_ray(next_isect.t)
                 + next_isect.normal*(next_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+    next.pdf = pdf_surface;
   }
 
   // ----------------- TEST LIGHT PATH ------------------
@@ -338,7 +341,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // of the light subpath. This should give a 5 vertex path (when path_length = 3).
 
   // discard path if it is not complete!
-  const int vertex_l = vertices.size()/2;
+  const int vertex_l = vertices.size()/2+1;
   Vertex &v_l = vertices[vertex_l];
   Vertex &v_c = vertices[1];
 
@@ -364,6 +367,11 @@ RGB Integrator::bd_path(const Scene& scene,
   float cosVL = glm::dot(v_l.isect.normal, -v_l.last.d);
   if( v_l.isect.shape->type == GLASS ) cosVL *= -1.0f;
 
+  // pdf of path junction
+  // TODO: this seems to be the problem!!
+  float pdf_junction_angle = v_c.isect.shape->pdf_brdf(-v_c.last.d, v2l, v_c.pos);
+  float pdf_junction = pdf_junction_angle * glm::dot(v_l.isect.normal, -v2l) / shadow_isect.d2;
+
   // throughput for the rest of the light path.
   //
   // we compute this throughput in the OPPOSITE sense then what is computed
@@ -387,12 +395,19 @@ RGB Integrator::bd_path(const Scene& scene,
     from_cam = cur.last;
   }
 
-  // throughput of the whole path. the final version of this must also compute
-  // the throughput of the camera subpath!
+  // run through the lightpath accumulating its pdf
+  float pdf_lp = 1.0f;
+  for(int i = vertices.size()-1; i >= vertex_l; --i)
+    pdf_lp *= vertices[i].pdf;
+
+  // throughput and pdf of the whole path. the final version of
+  // this must also compute the throughput and pdf of the camera subpath!
+  float pdf = pdf_lp;
+
   RGB tp = (brdf_v_c*cosVC) * (brdf_v_l*cosVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
-  return vis * e * tp;
+  return vis * e * tp * (1.0f / pdf);
 
   // ----------------------------------------------------
 
