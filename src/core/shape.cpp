@@ -9,18 +9,25 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
 
   //a = 1, because r.d is normalized
   Vec3 oc = ray.o - o;
-  float a = glm::dot(ray.d, ray.d);
+
+  //float a = glm::dot(ray.d, ray.d);
+  float a = 1.0f;
+
   float b = 2*glm::dot(ray.d, oc);
   float c = glm::dot(oc,oc) - r*r;
   float delta = b*b-4*c;
+
+  //printf("(%f %f %f %f %f) ", a, b, c, delta, glm::length(oc));
 
   // no intersection!
   if(delta < 0.0f) return false;
 
   // care for negative intersections, which are
   // behind the camera (and thus are invalid)
-  float t = (-b-sqrt(delta))/(2*a);          // closest intersection
-  if( t < 0.0f ) t = (-b+sqrt(delta))/(2*a); // if negative, check further intersection
+  //float t = (-b-sqrt(delta))/(2*a);          // closest intersection
+  float t = (-b-sqrt(delta)) * 0.5f;
+  //if( t < 0.0f ) t = (-b+sqrt(delta))/(2*a); // if negative, check further intersection
+  if (t < 0.0f) t = (-b+sqrt(delta))*0.5f;
 
   // if still negative, the ball is behind the camera and we should return nothing.
   if(t < 0.0f) return false;

@@ -3,7 +3,7 @@ cmake_policy(SET CMP0015 NEW)
 project(Raytracer)
 
 #TODO:make less use of hardcoded GCC flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -std=c++11 -g -DDEBUG")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -std=c++11 -g -DDEBUG")
 
 #Headers
 include_directories(include)
