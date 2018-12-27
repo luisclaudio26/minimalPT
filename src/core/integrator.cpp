@@ -265,12 +265,12 @@ RGB Integrator::bd_path(const Scene& scene,
   last.isect.shape = &l;
 
   // cast ray from this sample and find the first intersection
-  Ray l_ray( l_p + 0.0001f*l_n, l_d ); Isect l_isect;
+  Ray l_ray(l_p + 0.0001f*l_n, l_d); Isect l_isect;
 
   //TODO: DO SOMETHING IF WE MISSED THIS RAY. Camera subpath has the same issue.
   // for the specific case of the light path having size 1, we could simply skip
   // and work with the light sample only
-  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f, 0.0f, 0.0f);
+  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f, 0.0f, 1.0f);
 
   // fill the last but one vertex
   int lp_idx = vertices.size()-2;
@@ -365,6 +365,9 @@ RGB Integrator::bd_path(const Scene& scene,
   Ray shadow_ray(ray_o, ray_d); Isect shadow_isect;
   scene.cast_ray(shadow_ray, shadow_isect);
 
+  // TODO: IT LOOKS LIKE MANY V_L'S ARE FALLING CLOSE TO THE SOURCE LIGHT, GIVING
+  // THE HARD SHADOW LOOK!
+
   // two points do not see each other if they reach a surface from opposite sides.
   // this will happen everytime a light source is behind a thin wall: the shadow
   // ray will successfully connect the two paths, as intersection will happen at
@@ -424,10 +427,10 @@ RGB Integrator::bd_path(const Scene& scene,
   // this must also compute the throughput and pdf of the camera subpath!
   float pdf = pdf_lp;
 
-  RGB tp = (brdf_v_c*cosVC) * (brdf_v_l*cosVL) * tp_lp;
+  RGB tp = (brdf_v_c * cosVC) * (brdf_v_l * cosVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
-  return vis * e * tp * (1.0f / pdf);
+  return vis * e * tp; //* (1.0f / pdf);
 
   // ----------------------------------------------------
 
