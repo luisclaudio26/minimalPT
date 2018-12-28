@@ -272,6 +272,19 @@ RGB Integrator::bd_path(const Scene& scene,
   // and work with the light sample only
   if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f);
 
+  // BIZU MÁXIMO!!!
+  /*
+  static int n_ceil = 0;
+  static int n = 0;
+  n++; float w = 1.0f;
+  if( l_isect.shape == &scene.prims[1] )
+  {
+    n_ceil++;
+    w = 0.1f;
+  }
+  printf("\rCeil hit rate %f", (float)n_ceil/n*100);
+  */
+
   // fill the last but one vertex
   int lp_idx = vertices.size()-2;
 
@@ -281,6 +294,17 @@ RGB Integrator::bd_path(const Scene& scene,
   last_v.last = l_ray;
   last_v.isect = l_isect;
   last_v.pos = l_ray(l_isect.t);
+
+  /*
+  static float acc_pdf = 0.0f;
+  static int n = 0;
+  if( l_isect.shape == &scene.prims[1] )
+  {
+    acc_pdf += last.pdf * last_v.pdf;
+    n++;
+  }
+  printf("\rpdf = %f", acc_pdf/n);
+  */
 
   // build light subpath by sampling BRDFs
   for(int i = 2; i < path_length; ++i)
@@ -299,7 +323,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
     // convert pdf from solid angle to surface area units
     // TODO: I think its r²/cos, but not sure
-    float pdf_surface = pdf_dir * next_isect.d2 /glm::dot(next_isect.normal, -out_dir);
+    float pdf_surface = pdf_dir * next_isect.d2 / glm::dot(next_isect.normal, -out_dir);
 
     // store vertex info
     lp_idx -= 1;
@@ -450,10 +474,21 @@ RGB Integrator::bd_path(const Scene& scene,
   // this must also compute the throughput and pdf of the camera subpath!
   float pdf = pdf_lp;
 
+  // QUESTION: quando chega aqui, a probabilidade de acertar a bola da lateral
+  // é muito maior que a de acertar o teto. como pode?
+  static float acc_pdf = 0.0f;
+  static int n = 0;
+  if( l_isect.shape == &scene.prims[1])
+  {
+    acc_pdf += vertices[4].pdf;
+    n++;
+  }
+  printf("\rpdf = %f", acc_pdf/n);
+
   RGB tp = (brdf_v_c * cosVC) * (brdf_v_l * cosVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
-  return e * tp; //* (1.0f / pdf);
+  return e * tp * (1.0f / pdf);
 
   // ----------------------------------------------------
 
@@ -614,7 +649,7 @@ RGB Integrator::camera_path(const Scene& scene,
   float pdf_ls = path_pdf * light_pdf;
 
   // ------ TEST -------
-  return rad_ls; //* (1.0f / pdf_ls);
+  return rad_ls * (1.0f / pdf_ls);
 
   // Power heuristic for multiple importance sampling
   float over_sum_pdfs = 1.0f / (pdf_ls*pdf_ls + pdf_brdf*pdf_brdf);

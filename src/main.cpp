@@ -37,6 +37,10 @@ int main(int argc, char** args)
   ball_back.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_back);
 
+  Shape ball_front(Vec3(0.0f, 0.0f, (R+2.0f)), R);
+  ball_front.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_front);
+
   Shape ball_1(Vec3(0.15f,0.1f,-0.2f), 0.1f);
   ball_1.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_1);
@@ -45,8 +49,9 @@ int main(int argc, char** args)
   ball_2.type = DELTA;
   scene.add_primitive(ball_2);
 
-  Shape ball_light(Vec3(0.0f,0.9f,0.0f), 0.1f);
-  ball_light.emission = RGB(5.0f, 5.0f, 5.0f);
+  float w = 500.0f;
+  Shape ball_light(Vec3(0.0f,0.995f,0.0f), 0.005f);
+  ball_light.emission = RGB(w, w, w);
   ball_light.diff_color = RGB(0.0f, 0.0f, 0.0f);
   scene.add_primitive(ball_light);
 
