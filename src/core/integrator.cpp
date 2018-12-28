@@ -270,14 +270,14 @@ RGB Integrator::bd_path(const Scene& scene,
   //TODO: DO SOMETHING IF WE MISSED THIS RAY. Camera subpath has the same issue.
   // for the specific case of the light path having size 1, we could simply skip
   // and work with the light sample only
-  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f, 0.0f, 1.0f);
+  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f);
 
   // fill the last but one vertex
   int lp_idx = vertices.size()-2;
 
   Vertex &last_v = vertices[lp_idx];
   last_v.valid = true;
-  last_v.pdf = l_d_pdf * glm::dot(l_isect.normal, -l_d) / l_isect.d2;
+  last_v.pdf = l_d_pdf * l_isect.d2 / glm::dot(l_isect.normal, -l_d);
   last_v.last = l_ray;
   last_v.isect = l_isect;
   last_v.pos = l_ray(l_isect.t);
@@ -298,7 +298,8 @@ RGB Integrator::bd_path(const Scene& scene,
     if( !scene.cast_ray(next_ray, next_isect) ) break; //TODO: ray escaped. do something?
 
     // convert pdf from solid angle to surface area units
-    float pdf_surface = pdf_dir * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
+    // TODO: I think its r²/cos, but not sure
+    float pdf_surface = pdf_dir * next_isect.d2 /glm::dot(next_isect.normal, -out_dir);
 
     // store vertex info
     lp_idx -= 1;
@@ -366,7 +367,28 @@ RGB Integrator::bd_path(const Scene& scene,
   scene.cast_ray(shadow_ray, shadow_isect);
 
   // TODO: IT LOOKS LIKE MANY V_L'S ARE FALLING CLOSE TO THE SOURCE LIGHT, GIVING
-  // THE HARD SHADOW LOOK!
+  // THE HARD SHADOW LOOK! Although it does not look right, conceptually it appears
+  // to be ok: half of the incoming light on all points come from the indirect light
+  // reflected on the ceiling.
+  // Does this mean, then, that using only one strategy for BDPT (for example,
+  // s = 2 and t = 2), will give us wrong results, and we need all strategies
+  // in order to have the whole thing correct? Pathtracing uses only BRDF sampling
+  // and light sampling, meaning that some paths will be way more rare than others
+  // (which will be compensated by the low PDF), so some strategies always leads
+  // to correct results whereas other do not??
+  //
+  // A PDF é que vai garantir que as diversas estratégias convergem pro mesmo canto! alguns
+  // caminhos para uma estratégia são muito mais prováveis que para outra; a PDF deve ponderar
+  // inversamente essas coisas de forma que elas convirjam para o mesmo resultado.
+  //
+  // a potência da fonte de luz pequena é a chave! ela emite pouca energia, por isso que a cena com as probabilidades "certas" é tão escura.
+  // a distância é a chave na hora de computar a PDF. os caminhos de luz que batem na
+  // parede verde/vermelha são mais distantes que os que batem na parede próxima: eles
+  // deviam então ser mais "improváveis" -> PDF menor, daí peso maior pra eles.
+  //
+  // no fim, o throughput dos caminhos não deve estar tão errado assim (se é que está,
+  // em primeiro lugar), a PDF é que deveria garantir que todo mundo é igual num
+  // sentido assintótico
 
   // two points do not see each other if they reach a surface from opposite sides.
   // this will happen everytime a light source is behind a thin wall: the shadow
@@ -376,7 +398,8 @@ RGB Integrator::bd_path(const Scene& scene,
 
   Vec3 shadow_p = shadow_ray(shadow_isect.t);
   float dist = glm::distance(shadow_p, v_l.pos);
-  float vis = same_side && (dist < 0.0001f) ? 1.0f : 0.0f;
+  //float vis = same_side && (dist < 0.0001f) ? 1.0f : 0.0f;
+  if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
 
   // vertices actually see each other. compute contribution.
   // There's no PDF for the junction! the probability of picking this specific
@@ -430,7 +453,7 @@ RGB Integrator::bd_path(const Scene& scene,
   RGB tp = (brdf_v_c * cosVC) * (brdf_v_l * cosVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
-  return vis * e * tp; //* (1.0f / pdf);
+  return e * tp; //* (1.0f / pdf);
 
   // ----------------------------------------------------
 

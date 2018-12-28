@@ -6,6 +6,7 @@
 
 const float _pi = 3.141592654f;
 const float _2pi = 2.0f*_pi;
+const float _4pi = 4.0f*_pi;
 const float _overpi = 1.0f / _pi;
 const float _over2pi = 1.0f / _2pi;
 const float _over4pi = 1.0f / (4.0f * _pi);

@@ -192,7 +192,7 @@ void Shape::sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const
 
   normal = q;
   point = q*this->r + this->o;
-  pdf_area = 1.0f / (4.0f * 3.141592654f * this->r * this->r);
+  pdf_area = 1.0f / (_4pi * this->r * this->r);
 }
 
 void Shape::sample_as_light(Vec3& p, float& pdf_p,
