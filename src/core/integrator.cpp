@@ -107,6 +107,14 @@ static RGB sample_light(const Ray& primary_ray,
   // when the sampled point is in the opposite direction of the sphere) but with
   // visibility != 0.0. This is directly related to the way we compute v, as the
   // error occurs with -w_n.n always being less then 0.0001.
+  //
+  // Update: this makes sense now. It is exactly the opposite: pathtracing works
+  // with PDFs in terms of SURFACE AREA, not SOLID ANGLE. HOwever, all the sampled
+  // points have their PDFs in solid angle because we're choosing a direction and
+  // then casting a ray. Thus, during the whole process we're converting PDFs in
+  // SOLID ANGLE to PDFs in SURFACE AREA. The calculation below is doing the
+  // exact inverse of what it says: it is converting a PDF in solid angle to one
+  // in surface area, as needed to our path PDF computation.
   RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d, p) * L_qw;
   pdf_solidangle = pdf_area * r2 / glm::dot(n, -w_n);
 
@@ -290,21 +298,27 @@ RGB Integrator::bd_path(const Scene& scene,
 
   Vertex &last_v = vertices[lp_idx];
   last_v.valid = true;
-  last_v.pdf = l_d_pdf * l_isect.d2 / glm::dot(l_isect.normal, -l_d);
   last_v.last = l_ray;
   last_v.isect = l_isect;
   last_v.pos = l_ray(l_isect.t);
+  last_v.pdf = l_d_pdf;
 
-  /*
-  static float acc_pdf = 0.0f;
-  static int n = 0;
-  if( l_isect.shape == &scene.prims[1] )
-  {
-    acc_pdf += last.pdf * last_v.pdf;
-    n++;
-  }
-  printf("\rpdf = %f", acc_pdf/n);
-  */
+  // !!!!! THE UNDERLYING ASSUMPTION IN THESE PATH CONSTRUCTIONS IS THAT PDF's
+  // ARE EXPRESSED IN SOLID ANGLE, NOT SURFACE AREA! THUS WE CANT CONVERT THESE
+  //last_v.pdf = l_d_pdf; // SHOULD WE EXPECT THE SAME RESULTS USING PDF IN
+                          // SURFACE AREA AND SOLID ANGLE?! YES, BUT WE NEED THE
+                          // PROPER CHANGE OF VARIABLES. the way we build the paths
+                          // is expecting pdfs in solid angle, not surface area.
+                          // if we wanna do everything in surface area pdfs, we'll
+                          // need some extra cosine terms!!!
+  // once we pick a lens sample for a given pixel, there's probability 1 that we
+  // will choose a given ray (because of geometric optics). all the subsequente
+  // probabilities need to be expressed in surface area, thus we onvert pdfs in
+  // solid angle to it (this conversion is implicit in our path construction).
+  // the pdf in solid angle is all we have
+
+  // THERE ARE LOTS OF POINTS FALLING TOO CLOSE! THUS L_ISECT.D2 IS ALMOST ZERO
+  // AND, AS OF THE TERM 1.0/PDF, IT EXPLODES
 
   // build light subpath by sampling BRDFs
   for(int i = 2; i < path_length; ++i)
@@ -321,10 +335,6 @@ RGB Integrator::bd_path(const Scene& scene,
     Ray next_ray(ray_o, out_dir); Isect next_isect;
     if( !scene.cast_ray(next_ray, next_isect) ) break; //TODO: ray escaped. do something?
 
-    // convert pdf from solid angle to surface area units
-    // TODO: I think its r²/cos, but not sure
-    float pdf_surface = pdf_dir * next_isect.d2 / glm::dot(next_isect.normal, -out_dir);
-
     // store vertex info
     lp_idx -= 1;
 
@@ -332,7 +342,7 @@ RGB Integrator::bd_path(const Scene& scene,
     next.valid = true;
     next.last = next_ray;
     next.isect = next_isect;
-    next.pdf = pdf_surface;
+    next.pdf = pdf_dir;
     next.pos = next_ray(next_isect.t);
   }
 
@@ -422,8 +432,23 @@ RGB Integrator::bd_path(const Scene& scene,
 
   Vec3 shadow_p = shadow_ray(shadow_isect.t);
   float dist = glm::distance(shadow_p, v_l.pos);
-  //float vis = same_side && (dist < 0.0001f) ? 1.0f : 0.0f;
   if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
+
+  /*
+  static float acc_pdf = 0.0;
+  static int n = 0;
+  acc_pdf += vertices[5].pdf * vertices[4].pdf; n++;
+  printf("\ravg pdf %f", acc_pdf/n);
+  */
+
+  // RAYS THAT DO NOT REACH THIS PART HAVE THE WRONG(?) PDFS! WHY?!
+  // This also points to the fact that most rays in the ceiling are failing to
+  // connect after! maybe because of the light source itself occluding it?
+  // !!!!!!! THE PROBLEM IS NOT THE PDF ITSELF
+  // Well, the problem seems not to be the PDF itself, but all points that can
+  // directly see the light source end up with a high contribution.
+  // This means that we can just terminate the ray computation here, as we were
+  // doing before.
 
   // vertices actually see each other. compute contribution.
   // There's no PDF for the junction! the probability of picking this specific
@@ -474,21 +499,13 @@ RGB Integrator::bd_path(const Scene& scene,
   // this must also compute the throughput and pdf of the camera subpath!
   float pdf = pdf_lp;
 
-  // QUESTION: quando chega aqui, a probabilidade de acertar a bola da lateral
-  // é muito maior que a de acertar o teto. como pode?
-  static float acc_pdf = 0.0f;
-  static int n = 0;
-  if( l_isect.shape == &scene.prims[1])
-  {
-    acc_pdf += vertices[4].pdf;
-    n++;
-  }
-  printf("\rpdf = %f", acc_pdf/n);
-
   RGB tp = (brdf_v_c * cosVC) * (brdf_v_l * cosVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
-  return e * tp * (1.0f / pdf);
+  RGB out = e * tp * (1.0f / pdf);
+  //printf("%f %f %f\n", out.r, out.g, out.b);
+
+  return out;
 
   // ----------------------------------------------------
 
