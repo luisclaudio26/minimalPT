@@ -207,18 +207,17 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // ------------------ Camera path --------------------
   // we start by filling the second vertex cell (as the first EDGE is fixed due
-  // to lens delta specular behavior).
+  // to lens delta specular behavior). Its PDF is the only one which doesn't cut
+  // out terms when we divide compute L(X)/p(x), thus we need the explicit
+  // conversion from solid angle to surface area.
   int cp_idx = 1;
 
   Vertex &first_v = vertices[cp_idx];
   first_v.valid = true;
-  //first_v.pos = primary_ray(isect.t) + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   first_v.pos = primary_ray(isect.t);
   first_v.last = primary_ray;
   first_v.isect = isect;
-  first_v.pdf = 1.0f; // TODO: review this. should be pdf of the lens sample (?)
-                      // yes! as the paths here have their PDF in surface area units,
-                      // we can use the lens sample pdf
+  first_v.pdf = 1.0f * glm::dot(isect.normal, -primary_ray.d) / isect.d2;
 
   // keep sampling BRDF and building camera subpath
   Isect cp_isect = isect;
@@ -246,7 +245,6 @@ RGB Integrator::bd_path(const Scene& scene,
     v.pdf = dir_pdf;
     v.last = to_next_point;
     v.isect = next_isect;
-    //v.pos = to_next_point(next_isect.t) + next_isect.normal*(next_isect.shape->type == GLASS ? -0.0001f : 0.0001f);
     v.pos = to_next_point(next_isect.t);
   }
   // ----------------------- Light path --------------------------
@@ -265,6 +263,10 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // unlike the lens sample, we'll need to store at least partial info on the
   // light sample because we need it explicitly for the radiance computation step.
+  // Check the calculations on notebook to understand why this is also the only
+  // PDF in light subpath construction that is expressed in surface area and not
+  // solid angle (spoiler alert: all the remaining vertices will have their jacobians
+  // cancelled out when we compute L(X)/p(x)).
   Vertex &last = vertices[vertices.size()-1];
   last.valid = true;
   last.pdf = l_p_pdf;
@@ -320,7 +322,11 @@ RGB Integrator::bd_path(const Scene& scene,
   // THERE ARE LOTS OF POINTS FALLING TOO CLOSE! THUS L_ISECT.D2 IS ALMOST ZERO
   // AND, AS OF THE TERM 1.0/PDF, IT EXPLODES
 
-  // build light subpath by sampling BRDFs
+  // build light subpath by sampling BRDFs.
+  // TODO: maybe we won't need to go up to path_length but rather path_length-1,
+  // as we are desconsidering "pure" light paths (this would imply having to
+  // compute raster coordinates and stuff, which would need lots of modifications
+  // on the code structure).
   for(int i = 2; i < path_length; ++i)
   {
     // get current vertex, its position and sample BRDF
@@ -430,6 +436,8 @@ RGB Integrator::bd_path(const Scene& scene,
   // the very same position, but the do not actually see each other!
   bool same_side = glm::dot(ray_d, v_l.isect.normal) < 0.0f;
 
+  // TODO: the numerical problem near the corners is still happening, with rays
+  // cast from the near the corner being missed
   Vec3 shadow_p = shadow_ray(shadow_isect.t);
   float dist = glm::distance(shadow_p, v_l.pos);
   if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
@@ -458,14 +466,35 @@ RGB Integrator::bd_path(const Scene& scene,
   Vec3 v2l_ = v_l.pos - v_c.pos;
   Vec3 v2l = glm::normalize(v2l_);
 
+  // geometric coupling for the junction
+  float G_cosVC = glm::dot(v_c.isect.normal, v2l);
+  float G_cosVL = glm::dot(v_l.isect.normal, -v2l);
+  float G_r2 = glm::dot(v2l_, v2l_);
+  float G = G_cosVC * G_cosVL / G_r2;
+
+  // throughput - LIGHT PATH
+  float cosVL = glm::dot(v_l.last.d, vertices[vertex_l+1].isect.normal);
+  RGB brdfVL = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
+
+  // throughput - CAMERA PATH
+  //float cosVC = glm::dot(-v_c.last.d, v_c.isect.normal); <- this is being computed in the geometric coupling term!
+  float cosVC = 1.0f;
+  RGB brdfVC = v_c.isect.shape->brdf(v2l, -v_c.last.d, v_c.pos);
+
   // throughput at path junction
+  /*
   RGB brdf_v_c = v_c.isect.shape->brdf(-v_c.last.d, v2l, v_c.pos);
   float cosVC = glm::dot(v_c.isect.normal, v2l);
   if( v_c.isect.shape->type == GLASS ) cosVC *= -1.0f;
 
   RGB brdf_v_l = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
   float cosVL = glm::dot(v_l.isect.normal, -v_l.last.d);
+  */
+
+  /*
+  float cosVL = glm::dot(v_l.isect.normal, -v_l.last.d);
   if( v_l.isect.shape->type == GLASS ) cosVL *= -1.0f;
+  */
 
   // throughput for the rest of the light path.
   //
@@ -474,8 +503,9 @@ RGB Integrator::bd_path(const Scene& scene,
   //
   // also, there's no need for shadow ray the last vertex as it is guaranteed
   // to be visible by construction.
+  /*
   RGB tp_lp(1.0f); Ray from_cam = -shadow_ray;
-  for(int i = vertex_l+1; i < vertices.size()-1; ++i)
+  for(int i = vertices.size()-2; i > vertex_l; --i)
   {
     Vertex &cur = vertices[i];
 
@@ -489,6 +519,7 @@ RGB Integrator::bd_path(const Scene& scene,
     // update variables for next loop
     from_cam = cur.last;
   }
+  */
 
   // run through the lightpath accumulating its pdf
   float pdf_lp = 1.0f;
@@ -499,7 +530,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // this must also compute the throughput and pdf of the camera subpath!
   float pdf = pdf_lp;
 
-  RGB tp = (brdf_v_c * cosVC) * (brdf_v_l * cosVL) * tp_lp;
+  RGB tp = (cosVL * brdfVL) * G * (cosVC * brdfVC);
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
   RGB out = e * tp * (1.0f / pdf);

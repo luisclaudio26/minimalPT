@@ -55,7 +55,7 @@ void GUI::drawContents()
     integrator.render(this->scene);
     //integrator.light_tracer(this->scene);
     spp_count++;
-    //std::cout<<"\rComputed "<<spp_count<<" samples per pixel"<<std::flush;
+    std::cout<<"\rComputed "<<spp_count<<" samples per pixel"<<std::flush;
   }
 
   //---------- displaying ----------
