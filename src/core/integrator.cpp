@@ -380,9 +380,9 @@ RGB Integrator::bd_path(const Scene& scene,
   // 2. Link the first two vertices of the camera subpath with the first vertex
   // of the light subpath. This should give a 5 vertex path (when path_length = 3).
   // TODO: this code won't work for vertex_t = 0 (pure camera path)
-  const int vertex_t_ = 3;
+  const int vertex_t_ = 2;
   const int vertex_t = vertices.size() - vertex_t_;
-  const int vertex_s = 1;
+  const int vertex_s = 2;
   Vertex &v_l = vertices[vertex_t];
   Vertex &v_c = vertices[vertex_s];
 
@@ -465,8 +465,13 @@ RGB Integrator::bd_path(const Scene& scene,
   Vec3 v2l = glm::normalize(v2l_);
 
   // geometric coupling term and BRDFs for the connection point
+  // TODO: care for the GLASS BRDFs here!
   float G_cosVC = glm::dot(v_c.isect.normal, v2l);
+  if( v_c.isect.shape->type == GLASS ) G_cosVC *= -1.0f;
+
   float G_cosVL = glm::dot(v_l.isect.normal, -v2l);
+  if( v_l.isect.shape->type == GLASS ) G_cosVL *= -1.0f;
+
   float G_r2 = glm::dot(v2l_, v2l_);
   float G = G_cosVC * G_cosVL / G_r2;
 
@@ -494,11 +499,20 @@ RGB Integrator::bd_path(const Scene& scene,
     tp_lp *= brdf * cosV;
   }
 
-
   // throughput - CAMERA PATH
-  //float cosVC = glm::dot(-v_c.last.d, v_c.isect.normal); <- this is being computed in the geometric coupling term!
-  float cosVC = 1.0f;
+  RGB tp_cp(1.0f);
+  for(int i = 1; i < vertex_s; ++i)
+  {
+    Vertex &v = vertices[i];
+    Vec3 out_dir = vertices[i+1].last.d;
 
+    RGB brdf = v.isect.shape->brdf(-v.last.d, out_dir, v.pos);
+
+    float cosV = glm::dot(v.isect.normal, out_dir);
+    if( v.isect.shape->type == GLASS ) cosV *= -1.0f;
+
+    tp_cp *= brdf * cosV;
+  }
 
   // throughput at path junction
   /*
@@ -549,7 +563,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // this must also compute the throughput and pdf of the camera subpath!
   float pdf = pdf_lp;
 
-  RGB tp = 1.0f * (brdfVC * G * brdfVL) * tp_lp;
+  RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
 
   RGB out = e * tp * (1.0f / pdf);
