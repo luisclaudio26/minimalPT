@@ -598,6 +598,8 @@ void Integrator::render(const Scene& scene)
       // term.
       irradiance_sample = rad * glm::dot(-scene.cam.z, primary_ray.d);
 
+      //if( rad.r != rad.r ) printf("!");
+
       // sample splatting
       int sample_add = j*hRes+i;
       samples[sample_add] += irradiance_sample;

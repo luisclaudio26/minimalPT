@@ -24,6 +24,8 @@ static RGB connect_paths(const std::vector<Vertex>& vertices,
   const Vertex &v_l = vertices[vertex_t];
   const Vertex &v_c = vertices[vertex_s];
 
+  path_pdf = 1.0f;
+
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
   if( !v_l.valid ) return RGB(0.0f, 0.0f, 0.0f);
@@ -57,10 +59,10 @@ static RGB connect_paths(const std::vector<Vertex>& vertices,
 
   // geometric coupling term and BRDFs for the connection point
   // TODO: care for the GLASS BRDFs here!
-  float G_cosVC = glm::dot(v_c.isect.normal, v2l);
+  float G_cosVC = glm::max(0.0f, glm::dot(v_c.isect.normal, v2l));
   if( v_c.isect.shape->type == GLASS ) G_cosVC *= -1.0f;
 
-  float G_cosVL = glm::dot(v_l.isect.normal, -v2l);
+  float G_cosVL = glm::max(0.0f, glm::dot(v_l.isect.normal, -v2l));
   if( v_l.isect.shape->type == GLASS ) G_cosVL *= -1.0f;
 
   float G_r2 = glm::dot(v2l_, v2l_);
@@ -113,11 +115,12 @@ static RGB connect_paths(const std::vector<Vertex>& vertices,
   for(int i = 0; i <= vertex_s; ++i)
     pdf_cp *= vertices[i].pdf;
 
+  // TODO: negative PDFs are happening, but it seems to be rare
   path_pdf = pdf_lp * pdf_cp;
 
   // full path throughput
   RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
-  RGB e = vertices[vertices.size()-1].isect.shape->emission;
+  RGB e = vertices.back().isect.shape->emission;
 
   return e * tp;
 }
@@ -261,7 +264,10 @@ RGB Integrator::bd_path(const Scene& scene,
   float path_pdf;
   RGB path_rad = connect_paths(vertices, scene, path_pdf);
 
-  return path_rad * (1.0f / path_pdf);
+  RGB out = path_rad * (1.0f / path_pdf);
+  if(out.r != out.r) printf("!");
+
+  return out;
 }
 
 RGB Integrator::bdpt(const Scene& scene,

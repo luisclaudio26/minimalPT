@@ -16,7 +16,7 @@ int main(int argc, char** args)
   scene.cam.compute_parameters(Vec3(0.0f,0.5f,1.5f), Vec3(0.0f,1.0f,0.0f), Vec3(0.0f,0.5f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
   //scene.cam.compute_parameters(Vec3(0.0f,1.5f,-1.0f), Vec3(0.0f,0.0f,-1.0f), Vec3(0.0f,-1.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
 
-  float R = 100.0f;
+  float R = 1000.0f;
   Shape ball_floor(Vec3(0.0f,-R,0.0f), R);
   ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_floor);
@@ -47,7 +47,7 @@ int main(int argc, char** args)
   ball_1.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_1);
 
-  
+
   Shape ball_2(Vec3(-0.15f,0.1f,-0.2f), 0.1f);
   ball_2.type = DELTA;
   scene.add_primitive(ball_2);
