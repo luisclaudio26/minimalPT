@@ -207,15 +207,21 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // ------------------ Camera path --------------------
   // we start by filling the second vertex cell (as the first EDGE is fixed due
-  // to lens delta specular behavior). Its PDF is the only one which doesn't cut
+  // to lens delta specular behavior).
+  //
+  // Its PDF is the only one which doesn't cut
   // out terms when we divide compute L(X)/p(x), thus we need the explicit
   // conversion from solid angle to surface area.
+  // UPDATE: actually it does cancel out because there's also a geometric coupling
+  // term that comes from the measurement equation. the jacobian of the PDF cuts
+  // two cosine terms and leave one behind (cosine between normal at sensor and
+  // the sampled direction).
   Vertex &first_v = vertices[1];
   first_v.valid = true;
   first_v.pos = primary_ray(isect.t);
   first_v.last = primary_ray;
   first_v.isect = isect;
-  first_v.pdf = 1.0f * glm::dot(isect.normal, -primary_ray.d) / isect.d2;
+  first_v.pdf = 1.0f;
 
   // keep sampling BRDF and building camera subpath
   int cp_idx = 1;
@@ -382,14 +388,14 @@ RGB Integrator::bd_path(const Scene& scene,
   // TODO: this code won't work for vertex_t = 0 (pure camera path)
   const int vertex_t_ = 2;
   const int vertex_t = vertices.size() - vertex_t_;
-  const int vertex_s = 2;
+  const int vertex_s = 1;
   Vertex &v_l = vertices[vertex_t];
   Vertex &v_c = vertices[vertex_s];
 
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
-  if( !v_l.valid ) return RGB(1.0f, 1.0f, 0.0f);
-  if( !v_c.valid ) return RGB(0.0f, 1.0f, 1.0f);
+  if( !v_l.valid ) return RGB(0.0f, 0.0f, 0.0f);
+  if( !v_c.valid ) return RGB(0.0f, 0.0f, 0.0f);
 
   // cast shadow ray to check whether vertices see each other
   // TODO: numerical stability/precision on the method used to find the roots
@@ -501,6 +507,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // throughput - CAMERA PATH
   RGB tp_cp(1.0f);
+
   for(int i = 1; i < vertex_s; ++i)
   {
     Vertex &v = vertices[i];
@@ -559,9 +566,11 @@ RGB Integrator::bd_path(const Scene& scene,
   for(int i = vertices.size()-1; i >= vertex_t; --i)
     pdf_lp *= vertices[i].pdf;
 
-  // throughput and pdf of the whole path. the final version of
-  // this must also compute the throughput and pdf of the camera subpath!
-  float pdf = pdf_lp;
+  float pdf_cp = 1.0f;
+  for(int i = 0; i <= vertex_s; ++i)
+    pdf_cp *= vertices[i].pdf;
+
+  float pdf = pdf_lp * pdf_cp;
 
   RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
   RGB e = vertices[vertices.size()-1].isect.shape->emission;
@@ -757,7 +766,7 @@ RGB Integrator::pathtracer(const Scene& scene,
   return rad;
   */
 
-  return camera_path(scene, primary_ray, isect, 4);
+  return camera_path(scene, primary_ray, isect, 3);
 }
 
 RGB Integrator::normal_shading(const Scene& scene,
@@ -1028,12 +1037,15 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        //rad = pathtracer(scene, primary_ray, isect);
-        rad = bdpt(scene, primary_ray, isect);
+        rad = pathtracer(scene, primary_ray, isect);
+        //rad = bdpt(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
-      // Normal of the film is the look_at direction (-z)
+      // Normal of the film is the look_at direction (-z).
+      // TODO: not sure if this should be here or computed inside BD_path, given
+      // that this term is the remaining cosine of the sensor geometric coupling
+      // term.
       irradiance_sample = rad * glm::dot(-scene.cam.z, primary_ray.d);
 
       // sample splatting
