@@ -8,54 +8,6 @@
 using namespace std::chrono;
 
 // --------------------------------------------------------------------
-// ------------------------- Testing stuff ----------------------------
-// --------------------------------------------------------------------
-
-// ----- TEST: build full path from the camera vertices -----
-// compute path throughput and pdf
-// Seems correct overall, but must take care of the escaping rays, which are
-// doing some random thing!
-/*
-RGB tp(1.0f); float path_pdf = 1.0f;
-
-for(int i = 1; i < vertices.size()-1; ++i)
-{
-  Vertex &cur = vertices[i];
-  Vertex &next = vertices[i+1];
-
-  // do not compute any contribution if this path has not the proper length
-  if( !cur.valid || !next.valid ) tp = RGB(0.0f);
-
-  // BRDF and cosine terms
-  RGB brdf = cur.isect.shape->brdf(-cur.last.d, next.last.d, cur.pos);
-
-  float cosTerm = glm::dot(cur.isect.normal, next.last.d);
-  if( cur.isect.shape->type == GLASS ) cosTerm *= -1.0f;
-  tp *= brdf * cosTerm;
-
-  // path pdf is the product of the pdf of sampling each vertex.
-  // TODO: include probability of the first vertex! (lens sample)
-  path_pdf *= cur.pdf;
-}
-
-Vertex &v = vertices[path_length-1];
-if( v.valid )
-{
-  RGB emission = v.isect.shape->emission;
-  path_pdf *= v.pdf;
-
-  return (tp * emission) * (1.0f / path_pdf);
-}
-else return RGB(0.0f);
-*/
-
-
-
-// ----------------------------------------------------------
-
-// --------------------------------------------------------------------
-
-// --------------------------------------------------------------------
 // ------------------ Pathtracing helper functions --------------------
 // --------------------------------------------------------------------
 static RGB sample_light(const Ray& primary_ray,

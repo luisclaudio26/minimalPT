@@ -14,16 +14,16 @@ typedef struct
   bool valid;  // is this vertex valid or not?
 } Vertex;
 
-static RGB connect_paths(const std::vector<Vertex>& vertices,
+static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertices,
                           const Scene& scene, float& path_pdf)
 {
-  const int vertex_t_ = 2;
-  const int vertex_t = vertices.size() - vertex_t_;
-  const int vertex_s = 1;
+  const int vertex_t = vertices.size() - 1 - cam_l;
+  const int vertex_s = cam_c;
 
   const Vertex &v_l = vertices[vertex_t];
   const Vertex &v_c = vertices[vertex_s];
 
+  // preset path_pdf to 1.0 to avoid NaN samples when returning 0
   path_pdf = 1.0f;
 
   // discard path if it is not complete!
@@ -31,6 +31,9 @@ static RGB connect_paths(const std::vector<Vertex>& vertices,
   if( !v_l.valid ) return RGB(0.0f, 0.0f, 0.0f);
   if( !v_c.valid ) return RGB(0.0f, 0.0f, 0.0f);
 
+  // -----------------------------------------
+  // ----------- Visibility check ------------
+  // -----------------------------------------
   // cast shadow ray to check whether vertices see each other
   Vec3 ray_o = v_c.pos + v_c.isect.normal*(v_c.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   Vec3 ray_d = glm::normalize(v_l.pos - ray_o);
@@ -49,7 +52,48 @@ static RGB connect_paths(const std::vector<Vertex>& vertices,
   float dist = glm::distance(shadow_p, v_l.pos);
   if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
 
-  // vertices actually see each other. compute contribution.
+  // -----------------------------------------------
+  // ---------- throughput - LIGHT PATH ------------
+  // -----------------------------------------------
+  // check the notebook to understand why this starts with a cosine term, but it
+  // has something to do with regrouping the geometric terms. this is only the
+  // case if vertex_t > 0 (pure camera paths do not need this)
+  RGB tp_lp(1.0f);
+  tp_lp *= glm::dot(vertices.back().isect.normal, vertices[vertices.size()-2].last.d);
+
+  for(int i = vertices.size()-2; i > vertex_t; --i)
+  {
+    const Vertex &v = vertices[i];
+    Vec3 out_dir = vertices[i-1].last.d;
+
+    RGB brdf = v.isect.shape->brdf(-v.last.d, out_dir, v.pos);
+
+    float cosV = glm::dot(v.isect.normal, out_dir);
+    if( v.isect.shape->type == GLASS ) cosV *= -1.0f;
+
+    tp_lp *= brdf * cosV;
+  }
+
+  // ------------------------------------------------
+  // ---------- throughput - CAMERA PATH ------------
+  // ------------------------------------------------
+  RGB tp_cp(1.0f);
+  for(int i = 1; i < vertex_s; ++i)
+  {
+    const Vertex &v = vertices[i];
+    Vec3 out_dir = vertices[i+1].last.d;
+
+    RGB brdf = v.isect.shape->brdf(-v.last.d, out_dir, v.pos);
+
+    float cosV = glm::dot(v.isect.normal, out_dir);
+    if( v.isect.shape->type == GLASS ) cosV *= -1.0f;
+
+    tp_cp *= brdf * cosV;
+  }
+
+  //-----------------------------------------------
+  // ---------- throughput - CONNECTION -----------
+  //-----------------------------------------------
   // There's no PDF for the junction! the probability of picking this specific
   // path depends only on the probability of selecting the vertices. there's no
   // meaning in computing PDF for the junction, as once we build the subpaths,
@@ -71,42 +115,12 @@ static RGB connect_paths(const std::vector<Vertex>& vertices,
   RGB brdfVL = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
   RGB brdfVC = v_c.isect.shape->brdf(+v2l, -v_c.last.d, v_c.pos);
 
-  // throughput - LIGHT PATH
-  // check the notebook to understand why this starts with a cosine term, but it
-  // has something to do with regrouping the geometric terms. this is only the
-  // case if vertex_t > 0 (pure camera paths do not need this)
-  RGB tp_lp(1.0f);
-  tp_lp *= glm::dot(vertices.back().isect.normal, vertices[vertices.size()-2].last.d);
+  // full path throughput
+  RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
 
-  for(int i = vertices.size()-2; i > vertex_t; --i)
-  {
-    const Vertex &v = vertices[i];
-    Vec3 out_dir = vertices[i-1].last.d;
-
-    // update throughput
-    RGB brdf = v.isect.shape->brdf(-v.last.d, out_dir, v.pos);
-
-    float cosV = glm::dot(v.isect.normal, out_dir);
-    if( v.isect.shape->type == GLASS ) cosV *= -1.0f;
-
-    tp_lp *= brdf * cosV;
-  }
-
-  // throughput - CAMERA PATH
-  RGB tp_cp(1.0f);
-  for(int i = 1; i < vertex_s; ++i)
-  {
-    const Vertex &v = vertices[i];
-    Vec3 out_dir = vertices[i+1].last.d;
-
-    RGB brdf = v.isect.shape->brdf(-v.last.d, out_dir, v.pos);
-
-    float cosV = glm::dot(v.isect.normal, out_dir);
-    if( v.isect.shape->type == GLASS ) cosV *= -1.0f;
-
-    tp_cp *= brdf * cosV;
-  }
-
+  // ---------------------------------------
+  // ------------ Full path PDF ------------
+  // ---------------------------------------
   // run through the whole path accumulating its pdf
   float pdf_lp = 1.0f, pdf_cp = 1.0f;
 
@@ -115,14 +129,9 @@ static RGB connect_paths(const std::vector<Vertex>& vertices,
   for(int i = 0; i <= vertex_s; ++i)
     pdf_cp *= vertices[i].pdf;
 
-  // TODO: negative PDFs are happening, but it seems to be rare
+  // return L(x) and p(x)
   path_pdf = pdf_lp * pdf_cp;
-
-  // full path throughput
-  RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
-  RGB e = vertices.back().isect.shape->emission;
-
-  return e * tp;
+  return tp * vertices.back().isect.shape->emission;
 }
 
 RGB Integrator::bd_path(const Scene& scene,
@@ -142,7 +151,9 @@ RGB Integrator::bd_path(const Scene& scene,
     v.pdf = 1.0f;
   }
 
+  // ---------------------------------------------------
   // ------------------ Camera path --------------------
+  // ---------------------------------------------------
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
   //
@@ -187,7 +198,9 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.pos = to_next_point(next_isect.t);
   }
 
+  // -------------------------------------------------------------
   // ----------------------- Light path --------------------------
+  // -------------------------------------------------------------
   // randomly pick a lightsource and sample a point on its surface
   // TODO: this will be biased if we have more than one light source!
   // must consider the case where there's more than one light source,
@@ -260,21 +273,25 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.pos = next_ray(next_isect.t);
   }
 
-  // compute strategies and accumulate
-  float path_pdf;
-  RGB path_rad = connect_paths(vertices, scene, path_pdf);
+  // -------------------------------------------
+  // ------------ Path connections -------------
+  // -------------------------------------------
+  float path_pdf1;
+  RGB path_rad1 = connect_paths(1, 2, vertices, scene, path_pdf1);
+  RGB s1 = path_rad1 * (1.0f / path_pdf1);
 
-  RGB out = path_rad * (1.0f / path_pdf);
-  if(out.r != out.r) printf("!");
+  float path_pdf2;
+  RGB path_rad2 = connect_paths(2, 1, vertices, scene, path_pdf2);
+  RGB s2 = path_rad2 * (1.0f / path_pdf2);
 
-  return out;
+  return (s1+s2)*0.5f;
 }
 
 RGB Integrator::bdpt(const Scene& scene,
                       const Ray& primary_ray,
                       const Isect& isect)
 {
-  return bd_path(scene, primary_ray, isect, 5);
+  return bd_path(scene, primary_ray, isect, 6);
 }
 
 // -----------------------------------------------------------------------------
@@ -455,3 +472,41 @@ return vis*(v_last.isect.shape->emission * tp) * (1.0f/path_pdf);
 
 // THERE ARE LOTS OF POINTS FALLING TOO CLOSE! THUS L_ISECT.D2 IS ALMOST ZERO
 // AND, AS OF THE TERM 1.0/PDF, IT EXPLODES
+
+// ----- TEST: build full path from the camera vertices -----
+// compute path throughput and pdf
+// Seems correct overall, but must take care of the escaping rays, which are
+// doing some random thing!
+/*
+RGB tp(1.0f); float path_pdf = 1.0f;
+
+for(int i = 1; i < vertices.size()-1; ++i)
+{
+  Vertex &cur = vertices[i];
+  Vertex &next = vertices[i+1];
+
+  // do not compute any contribution if this path has not the proper length
+  if( !cur.valid || !next.valid ) tp = RGB(0.0f);
+
+  // BRDF and cosine terms
+  RGB brdf = cur.isect.shape->brdf(-cur.last.d, next.last.d, cur.pos);
+
+  float cosTerm = glm::dot(cur.isect.normal, next.last.d);
+  if( cur.isect.shape->type == GLASS ) cosTerm *= -1.0f;
+  tp *= brdf * cosTerm;
+
+  // path pdf is the product of the pdf of sampling each vertex.
+  // TODO: include probability of the first vertex! (lens sample)
+  path_pdf *= cur.pdf;
+}
+
+Vertex &v = vertices[path_length-1];
+if( v.valid )
+{
+  RGB emission = v.isect.shape->emission;
+  path_pdf *= v.pdf;
+
+  return (tp * emission) * (1.0f / path_pdf);
+}
+else return RGB(0.0f);
+*/
