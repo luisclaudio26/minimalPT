@@ -47,6 +47,7 @@ int main(int argc, char** args)
   ball_1.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_1);
 
+  
   Shape ball_2(Vec3(-0.15f,0.1f,-0.2f), 0.1f);
   ball_2.type = DELTA;
   scene.add_primitive(ball_2);
@@ -57,6 +58,7 @@ int main(int argc, char** args)
   ball_2.eta = 0.45f;
   scene.add_primitive(ball_2);
   */
+
 
   Shape ball_3(Vec3(0.0f,0.85f,0.0f), 0.1f);
   ball_3.diff_color = RGB(1.0f, 1.0f, 1.0f);
