@@ -103,7 +103,7 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
 
   // geometric coupling term and BRDFs for the connection point
   // TODO: care for the GLASS BRDFs here!
-  float G_cosVC = glm::max(0.0f, glm::dot(v_c.isect.normal, v2l));
+  float G_cosVC = glm::max(0.0f, glm::dot(v_c.isect.normal, +v2l));
   if( v_c.isect.shape->type == GLASS ) G_cosVC *= -1.0f;
 
   float G_cosVL = glm::max(0.0f, glm::dot(v_l.isect.normal, -v2l));
@@ -116,7 +116,8 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
   RGB brdfVC = v_c.isect.shape->brdf(+v2l, -v_c.last.d, v_c.pos);
 
   // full path throughput
-  RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
+  //RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
+  RGB tp = tp_cp * (brdfVC * G); // !!!! TEST !!!!
 
   // ---------------------------------------
   // ------------ Full path PDF ------------
@@ -276,6 +277,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // -------------------------------------------
   // ------------ Path connections -------------
   // -------------------------------------------
+  /*
   float path_pdf1;
   RGB path_rad1 = connect_paths(1, 2, vertices, scene, path_pdf1);
   RGB s1 = path_rad1 * (1.0f / path_pdf1);
@@ -283,8 +285,13 @@ RGB Integrator::bd_path(const Scene& scene,
   float path_pdf2;
   RGB path_rad2 = connect_paths(2, 1, vertices, scene, path_pdf2);
   RGB s2 = path_rad2 * (1.0f / path_pdf2);
+  */
 
-  return (s1+s2)*0.5f;
+  float path_pdf3;
+  RGB path_rad3 = connect_paths(1, 0, vertices, scene, path_pdf3);
+  RGB s3 = path_rad3 * (1.0f / path_pdf3);
+
+  return s3;
 }
 
 RGB Integrator::bdpt(const Scene& scene,
