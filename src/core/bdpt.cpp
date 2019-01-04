@@ -28,8 +28,8 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
 
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
-  if( !v_l.valid ) return RGB(0.0f, 0.0f, 0.0f);
-  if( !v_c.valid ) return RGB(0.0f, 0.0f, 0.0f);
+  if( !v_l.valid ) return RGB(1.0f, 1.0f, 0.0f);
+  if( !v_c.valid ) return RGB(0.0f, 1.0f, 1.0f);
 
   // -----------------------------------------
   // ----------- Visibility check ------------
@@ -48,9 +48,15 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
 
   // TODO: the numerical problem near the corners is still happening, with rays
   // cast from the near the corner being missed
+  // TODO: also due to numerical problems, setting distance >= 0.00001f makes
+  // the "disks" appears just like the pathtracer implementation. this means that
+  // the direct lighting is correct!
   Vec3 shadow_p = shadow_ray(shadow_isect.t);
   float dist = glm::distance(shadow_p, v_l.pos);
-  if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
+  if( !same_side || dist >= 0.0001f )
+    return RGB(0.0f);
+  else
+    return RGB(1.0f);
 
   // -----------------------------------------------
   // ---------- throughput - LIGHT PATH ------------
@@ -110,14 +116,14 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
   if( v_l.isect.shape->type == GLASS ) G_cosVL *= -1.0f;
 
   float G_r2 = glm::dot(v2l_, v2l_);
-  float G = G_cosVC * G_cosVL / G_r2;
+  float G = (G_cosVC * G_cosVL) / G_r2;
 
   RGB brdfVL = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
   RGB brdfVC = v_c.isect.shape->brdf(+v2l, -v_c.last.d, v_c.pos);
 
   // full path throughput
   //RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
-  RGB tp = tp_cp * (brdfVC * G); // !!!! TEST !!!!
+  RGB tp = (brdfVC * G); // !!!! TEST !!!!
 
   // ---------------------------------------
   // ------------ Full path PDF ------------
@@ -234,7 +240,7 @@ RGB Integrator::bd_path(const Scene& scene,
   //TODO: DO SOMETHING IF WE MISSED THIS RAY. Camera subpath has the same issue.
   // for the specific case of the light path having size 1, we could simply skip
   // and work with the light sample only
-  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f);
+  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(1.0f, 0.0f, 0.0f);
 
   // fill the last but one vertex
   Vertex &last_v = vertices[vertices.size()-2];
@@ -289,7 +295,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
   float path_pdf3;
   RGB path_rad3 = connect_paths(1, 0, vertices, scene, path_pdf3);
-  RGB s3 = path_rad3 * (1.0f / path_pdf3);
+  RGB s3 = path_rad3; //* (1.0f / path_pdf3);
 
   return s3;
 }
@@ -298,7 +304,7 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Ray& primary_ray,
                       const Isect& isect)
 {
-  return bd_path(scene, primary_ray, isect, 6);
+  return bd_path(scene, primary_ray, isect, 3);
 }
 
 // -----------------------------------------------------------------------------
