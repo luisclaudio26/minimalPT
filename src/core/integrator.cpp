@@ -70,8 +70,7 @@ static RGB sample_light(const Ray& primary_ray,
   RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d, p) * L_qw;
   pdf_solidangle = pdf_area * r2 / glm::dot(n, -w_n);
 
-  // return rad;
-  return RGB( v );
+  return rad;
 }
 
 static RGB sample_brdf(const Ray& primary_ray,
@@ -229,10 +228,8 @@ RGB Integrator::camera_path(const Scene& scene,
   // if material has specular properties, it is in general useless to sample
   // the light sources, as this will return paths with pdf zero which will NaN
   // the output. if this is the case, simply return the BRDF sampling path.
-  /*
   if( isect_p.shape->type == GLASS || isect_p.shape->type == DELTA )
     return rad_brdf * (1.0f / pdf_brdf);
-  */
 
   // sample light sources. reaching this point means that the material is
   // glossy/diffuse (non-delta)
@@ -240,8 +237,6 @@ RGB Integrator::camera_path(const Scene& scene,
   RGB di_ls = sample_light(o_to_p, isect_p, scene, light_pdf);
   RGB rad_ls = di_ls * throughput;
   float pdf_ls = path_pdf * light_pdf;
-
-  return rad_ls;
 
   // Power heuristic for multiple importance sampling
   float over_sum_pdfs = 1.0f / (pdf_ls*pdf_ls + pdf_brdf*pdf_brdf);
@@ -259,16 +254,13 @@ RGB Integrator::pathtracer(const Scene& scene,
   // TODO: russian rouletting. the it is done below is
   // underestimating the total radiance, thus the image
   // is always darker than it should
-  const int max_length = 5;
+  const int max_length = 6;
 
-  /*
   RGB rad(0.0f);
   for(int i = 0; i <= max_length; ++i)
     rad += camera_path(scene, primary_ray, isect, i);
-  return rad;
-  */
 
-  return camera_path(scene, primary_ray, isect, 2);
+  return rad;
 }
 
 RGB Integrator::normal_shading(const Scene& scene,
@@ -539,8 +531,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        //rad = pathtracer(scene, primary_ray, isect);
-        rad = bdpt(scene, primary_ray, isect);
+        rad = pathtracer(scene, primary_ray, isect);
+        //rad = bdpt(scene, primary_ray, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.

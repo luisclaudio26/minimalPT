@@ -14,11 +14,11 @@ typedef struct
   bool valid;  // is this vertex valid or not?
 } Vertex;
 
-static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertices,
+static RGB connect_paths(int cam_vertex, int light_vertex, const std::vector<Vertex>& vertices,
                           const Scene& scene, float& path_pdf)
 {
-  const int vertex_t = vertices.size() - 1 - cam_l;
-  const int vertex_s = cam_c;
+  const int vertex_t = vertices.size() - 1 - light_vertex;
+  const int vertex_s = cam_vertex;
 
   const Vertex &v_l = vertices[vertex_t];
   const Vertex &v_c = vertices[vertex_s];
@@ -28,8 +28,8 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
 
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
-  if( !v_l.valid ) return RGB(1.0f, 1.0f, 0.0f);
-  if( !v_c.valid ) return RGB(0.0f, 1.0f, 1.0f);
+  if( !v_l.valid ) return RGB(0.0f); //return RGB(1.0f, 1.0f, 0.0f);
+  if( !v_c.valid ) return RGB(0.0f); //return RGB(0.0f, 1.0f, 1.0f);
 
   // -----------------------------------------
   // ----------- Visibility check ------------
@@ -53,10 +53,7 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
   // the direct lighting is correct!
   Vec3 shadow_p = shadow_ray(shadow_isect.t);
   float dist = glm::distance(shadow_p, v_l.pos);
-  if( !same_side || dist >= 0.0001f )
-    return RGB(0.0f);
-  else
-    return RGB(1.0f);
+  if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
 
   // -----------------------------------------------
   // ---------- throughput - LIGHT PATH ------------
@@ -65,7 +62,11 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
   // has something to do with regrouping the geometric terms. this is only the
   // case if vertex_t > 0 (pure camera paths do not need this)
   RGB tp_lp(1.0f);
-  tp_lp *= glm::dot(vertices.back().isect.normal, vertices[vertices.size()-2].last.d);
+
+  // this first term is only present if we have an actual light path (not only
+  // using the light sample alone)
+  if( light_vertex > 0 )
+    tp_lp *= glm::dot(vertices.back().isect.normal, vertices[vertices.size()-2].last.d);
 
   for(int i = vertices.size()-2; i > vertex_t; --i)
   {
@@ -97,6 +98,19 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
     tp_cp *= brdf * cosV;
   }
 
+  // ---------------------------------------
+  // ------------ Full path PDF ------------
+  // ---------------------------------------
+  // run through the whole path accumulating its pdf
+  float pdf_lp = 1.0f, pdf_cp = 1.0f;
+
+  for(int i = vertices.size()-1; i >= vertex_t; --i)
+    pdf_lp *= vertices[i].pdf;
+  for(int i = 0; i <= vertex_s; ++i)
+    pdf_cp *= vertices[i].pdf;
+
+  path_pdf = pdf_lp * pdf_cp;
+
   //-----------------------------------------------
   // ---------- throughput - CONNECTION -----------
   //-----------------------------------------------
@@ -122,22 +136,12 @@ static RGB connect_paths(int cam_c, int cam_l, const std::vector<Vertex>& vertic
   RGB brdfVC = v_c.isect.shape->brdf(+v2l, -v_c.last.d, v_c.pos);
 
   // full path throughput
-  //RGB tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
-  RGB tp = (brdfVC * G); // !!!! TEST !!!!
+  RGB tp(1.0f);
+  if( light_vertex == 0 )
+    tp = tp_cp * (brdfVC * G);
+  else
+    tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
 
-  // ---------------------------------------
-  // ------------ Full path PDF ------------
-  // ---------------------------------------
-  // run through the whole path accumulating its pdf
-  float pdf_lp = 1.0f, pdf_cp = 1.0f;
-
-  for(int i = vertices.size()-1; i >= vertex_t; --i)
-    pdf_lp *= vertices[i].pdf;
-  for(int i = 0; i <= vertex_s; ++i)
-    pdf_cp *= vertices[i].pdf;
-
-  // return L(x) and p(x)
-  path_pdf = pdf_lp * pdf_cp;
   return tp * vertices.back().isect.shape->emission;
 }
 
@@ -240,7 +244,7 @@ RGB Integrator::bd_path(const Scene& scene,
   //TODO: DO SOMETHING IF WE MISSED THIS RAY. Camera subpath has the same issue.
   // for the specific case of the light path having size 1, we could simply skip
   // and work with the light sample only
-  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(1.0f, 0.0f, 0.0f);
+  if( !scene.cast_ray(l_ray, l_isect) ) return RGB(0.0f);
 
   // fill the last but one vertex
   Vertex &last_v = vertices[vertices.size()-2];
@@ -283,28 +287,40 @@ RGB Integrator::bd_path(const Scene& scene,
   // -------------------------------------------
   // ------------ Path connections -------------
   // -------------------------------------------
-  /*
   float path_pdf1;
-  RGB path_rad1 = connect_paths(1, 2, vertices, scene, path_pdf1);
+  RGB path_rad1 = connect_paths(1, 0, vertices, scene, path_pdf1);
   RGB s1 = path_rad1 * (1.0f / path_pdf1);
 
   float path_pdf2;
-  RGB path_rad2 = connect_paths(2, 1, vertices, scene, path_pdf2);
+  RGB path_rad2 = connect_paths(1, 1, vertices, scene, path_pdf2);
   RGB s2 = path_rad2 * (1.0f / path_pdf2);
-  */
 
   float path_pdf3;
-  RGB path_rad3 = connect_paths(1, 0, vertices, scene, path_pdf3);
-  RGB s3 = path_rad3; //* (1.0f / path_pdf3);
+  RGB path_rad3 = connect_paths(1, 2, vertices, scene, path_pdf3);
+  RGB s3 = path_rad3 * (1.0f / path_pdf3);
 
-  return s3;
+  RGB acc(0.0f); int n_strategies = 0;
+  for(int c = 1; c < path_length-1; ++c)
+  {
+    int l = path_length - 2 - c;
+
+    float path_pdf;
+    RGB path_rad = connect_paths(c, l, vertices, scene, path_pdf);
+
+    acc += path_rad * (1.0f / path_pdf);
+    n_strategies += 1;
+  }
+
+  return acc * (1.0f / n_strategies);
 }
 
 RGB Integrator::bdpt(const Scene& scene,
                       const Ray& primary_ray,
                       const Isect& isect)
 {
-  return bd_path(scene, primary_ray, isect, 3);
+  RGB out(0.0f);
+  for(int i = 3; i < 7; ++i) out += bd_path(scene, primary_ray, isect, i);
+  return out;
 }
 
 // -----------------------------------------------------------------------------

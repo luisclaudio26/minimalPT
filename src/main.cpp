@@ -59,11 +59,9 @@ int main(int argc, char** args)
   scene.add_primitive(ball_2);
   */
 
-  /*
   Shape ball_3(Vec3(0.0f,0.85f,0.0f), 0.1f);
   ball_3.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_3);
-  */
 
   float w = 500.0f;
   Shape ball_light(Vec3(0.0f,0.995f,0.0f), 0.005f);
