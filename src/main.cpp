@@ -43,28 +43,21 @@ int main(int argc, char** args)
   scene.add_primitive(ball_front);
   */
 
-  Shape ball_1(Vec3(0.15f,0.1f,-0.2f), 0.1f);
+  Shape ball_1(Vec3(0.0f,0.1f,-0.2f), 0.1f);
   ball_1.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_1);
 
-
-  Shape ball_2(Vec3(-0.15f,0.1f,-0.2f), 0.1f);
+  Shape ball_2(Vec3(-0.3f,0.1f,-0.2f), 0.1f);
   ball_2.type = DELTA;
   scene.add_primitive(ball_2);
 
-  /*
-  Shape ball_2(Vec3(-0.15f,0.1f,-0.2f), 0.1f);
-  ball_2.type = GLASS;
-  ball_2.eta = 0.45f;
-  scene.add_primitive(ball_2);
-  */
-
-  Shape ball_3(Vec3(0.0f,0.85f,0.0f), 0.1f);
-  ball_3.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  Shape ball_3(Vec3(0.3f,0.1f,-0.2f), 0.1f);
+  ball_3.type = GLASS;
+  ball_3.eta = 0.45f;
   scene.add_primitive(ball_3);
 
-  float w = 500.0f;
-  Shape ball_light(Vec3(0.0f,0.995f,0.0f), 0.005f);
+  float w = 10.0f;
+  Shape ball_light(Vec3(0.0f,0.9f,-0.4f), 0.05f);
   ball_light.emission = RGB(w, w, w);
   ball_light.diff_color = RGB(0.0f, 0.0f, 0.0f);
   scene.add_primitive(ball_light);

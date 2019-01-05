@@ -48,7 +48,7 @@ static RGB sample_light(const Ray& primary_ray,
   Ray shadow_ray(p, w_n);
   Isect isect_shadow;
   scene.cast_ray(shadow_ray, isect_shadow);
-  float v = glm::length(shadow_ray(isect_shadow.t)-q) < 0.00001f ? 1.0f : 0.0f;
+  float v = glm::length(shadow_ray(isect_shadow.t)-q) < 0.0001f ? 1.0f : 0.0f;
 
   // return a single the contribution f(x) and the pdf p(x) of choosing this point.
   // We clamp the PDF to zero in case glm::dot(n, -w_n) is negative because even
