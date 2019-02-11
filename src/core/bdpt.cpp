@@ -291,17 +291,20 @@ RGB Integrator::bd_path(const Scene& scene,
   // -------------------------------------------
   // ------------ Path connections -------------
   // -------------------------------------------
-  float path_pdf1;
-  RGB path_rad1 = connect_paths(1, 0, vertices, scene, path_pdf1);
-  RGB s1 = path_rad1 * (1.0f / path_pdf1);
-
-  float path_pdf2;
-  RGB path_rad2 = connect_paths(1, 1, vertices, scene, path_pdf2);
-  RGB s2 = path_rad2 * (1.0f / path_pdf2);
-
-  float path_pdf3;
-  RGB path_rad3 = connect_paths(1, 2, vertices, scene, path_pdf3);
-  RGB s3 = path_rad3 * (1.0f / path_pdf3);
+  // TODO: the optimal way of doing this is to combine all paths using the
+  // balance/power heuristics instead of simply averaging everything (which might
+  // be causing the darkened look in refractive materials).
+  // In order to do this, we can:
+  // 1) compute all paths of all lenghts, just like the code already does
+  // 2) if p_i(X) of a certain path X is zero, skip it (this will cause 0/0 problems)
+  // 3) if not, accumulate the running sum of the p_i(X)'s.
+  //
+  //
+  // I'M NOT SURE THAT THE POWER HEURISTICS USED IN PATHTRACING IS 100% CORRECT!
+  // Specifically, the way probabilities are computed seems odd; we should be able
+  // to compute the probability of choosing a given path by any of the sampling
+  // strategies: thus, in the case of BDPT, if we have 5 path sampling strategies,
+  // for example, when sampling one path we would need 5 PDFs? Check this!
 
   RGB acc(0.0f); int n_strategies = 0;
   for(int c = 1; c < path_length-1; ++c)
