@@ -305,7 +305,54 @@ RGB Integrator::bd_path(const Scene& scene,
   // to compute the probability of choosing a given path by any of the sampling
   // strategies: thus, in the case of BDPT, if we have 5 path sampling strategies,
   // for example, when sampling one path we would need 5 PDFs? Check this!
-
+  //
+  // UPDATE: indeed, one must be able to pick a strategy (light sampling, let's
+  // say), and not only sample a path with it, but also evaluate the probability
+  // of picking a given path using this strategy.
+  //
+  // In order to correctly compute the weights for MIS, we need FORWARD and
+  // REVERSE PDFs after incrementally building a path: we incrementally build a
+  // path, accumulating the PDFs (in surface area) of each vertex; then we start
+  // from the last vertex and compute the PDFs (in surface area) of picking each
+  // vertex in reverse direction. Once we do this, we can compute the PDF os
+  // sampling this very same path using any strategy. For example:
+  //
+  // Camera path:
+  //      x0 -> x1 -> x2 -> x3 -> x4 -> x5
+  // Light path:
+  //      y5 <- y4 <- y3 <- y2 <- y1 <- y0
+  //
+  // Path X built using <3,3> connection strategy:
+  //     x0 -> x1 -> x2 --- y2 <- y1 <- y0
+  //
+  // In a general sense, the PDF os picking this particular path is always:
+  //     p(x0).p(x1).p(x2).p(y2).p(y1).p(y0)
+  //
+  // What changes between strategies, though, is the PDF os picking a given vertex
+  // based on the previous choice. For example, the <3,3> strategy samples the
+  // path in a way that the PDF of X is:
+  //
+  //     p(X) = p(x0).p(x1|x0).p(x2|x1) . p(y0).p(y1|y0).p(y2|y1)
+  //
+  // The <2,4> connection, however, would sample it in a way that p(X) would be:
+  //
+  //    p(X) = p(x0).p(x1|x0) . p(y0).p(y1|y0).p(y2|y1).p(x2|y2)
+  //
+  // Notice that we need to compute the PDF of picking x2 when in the vertex y2.
+  // We need to check for visibility only once (the shadow ray cast in the first
+  // part of the connection asserts that), then we need to lookup the BRDF at y2
+  // to know what is the probability of picking x2 from then.
+  //
+  // Also, the <4,2> connection would be:
+  //
+  //    p(X) = p(x0).p(x1|x0).p(x2|x1).p(y2|x2) . p(y0).p(y1|y0)
+  //
+  // Which means we need to store p(y2|x2) and p(x2|y2). Indeed, the <5,1> strategy
+  // would also require p(y1|y0) (and conversely, the <1,5> strategy would require
+  // p(x0|x1)). Thus, once we build the camera and the light paths, we should
+  // store all the probabilities in forward and reverse directions. The final
+  // weight for balance heuristic needs all the probabilities after building the
+  // path using a given connection strategy.
   RGB acc(0.0f); int n_strategies = 0;
   for(int c = 1; c < path_length-1; ++c)
   {

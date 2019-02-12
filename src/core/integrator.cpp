@@ -239,6 +239,8 @@ RGB Integrator::camera_path(const Scene& scene,
   float pdf_ls = path_pdf * light_pdf;
 
   // Power heuristic for multiple importance sampling
+  // TODO: THIS IS NOT CORRECT! Check BDPT comments on multiple importance
+  // sampling the different strategies!
   float over_sum_pdfs = 1.0f / (pdf_ls*pdf_ls + pdf_brdf*pdf_brdf);
   float w_light = (pdf_ls*pdf_ls) * over_sum_pdfs;
   float w_brdf = (pdf_brdf*pdf_brdf) * over_sum_pdfs;
