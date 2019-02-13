@@ -11,33 +11,55 @@
 
 typedef struct
 {
-  Isect isect; // intersection info
-  Vec3 pos;    // position of this vertex
-  Ray last;    // the ray used to find this vertex
-  float pdf;   // PDF (solid angle) of being selected by the last vertex
-  bool valid;  // is this vertex valid or not?
+  Isect isect;     // intersection info
+  Vec3 pos;        // position of this vertex
+  Ray last;        // the ray used to find this vertex
+  float pdf_fwd;   // PDF (surface area) of being selected by the last vertex
+  float pdf_bwd;   // PDF (surface area) of being selected by the next vertex
+  bool valid;      // is this vertex valid or not?
 } Vertex;
 
-static RGB connect_paths(int cam_vertex, int light_vertex, const std::vector<Vertex>& vertices,
+static float geometric_coupling(const Vertex& v1, const Vertex& v2)
+{
+  Vec3 r_ = v2.pos - v1.pos;
+  Vec3 r = glm::normalize(r_);
+  float d2 = glm::dot(r_, r_);
+
+  float N1_r = glm::dot(v1.isect.normal, r);
+  float N2_r = glm::dot(v2.isect.normal, -r);
+
+  return (N1_r * N2_r) / d2;
+}
+
+static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
+                          const std::vector<Vertex>& vertices,
                           const Scene& scene, float& path_pdf)
 {
-  const int vertex_t = vertices.size() - 1 - light_vertex;
-  const int vertex_s = cam_vertex;
-
-  const Vertex &v_l = vertices[vertex_t];
-  const Vertex &v_c = vertices[vertex_s];
+  // UPDATE: the semantics of cam_vertex/light_vertex are now:
+  // n_cam_vertices and n_light_vertices, meaning how many vertices
+  // from each path we pretend to use (starting from the vertex on the lens
+  // or on the light source). Thus, vertex_s stores the last cam vertex and
+  // vertex_t stores the first light vertex.
+  // TODO: throw error if vertex_s = -1, as we do not allow full light paths
+  const int vertex_t = vertices.size() - n_light_vertices;
+  const int vertex_s = n_cam_vertices - 1;
 
   // preset path_pdf to 1.0 to avoid NaN samples when returning 0
   path_pdf = 1.0f;
 
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
+  const Vertex &v_l = vertices[vertex_t];
   if( !v_l.valid ) return RGB(0.0f); //return RGB(1.0f, 1.0f, 0.0f);
+
+  const Vertex &v_c = vertices[vertex_s];
   if( !v_c.valid ) return RGB(0.0f); //return RGB(0.0f, 1.0f, 1.0f);
 
   // -----------------------------------------
   // ----------- Visibility check ------------
   // -----------------------------------------
+  // TODO: skip visibility check if vertex_t = 0
+  // <editor-fold> Visibility check at connection
   // cast shadow ray to check whether vertices see each other
   Vec3 ray_o = v_c.pos + v_c.isect.normal*(v_c.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   Vec3 ray_d = glm::normalize(v_l.pos - ray_o);
@@ -58,10 +80,14 @@ static RGB connect_paths(int cam_vertex, int light_vertex, const std::vector<Ver
   Vec3 shadow_p = shadow_ray(shadow_isect.t);
   float dist = glm::distance(shadow_p, v_l.pos);
   if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
+  // </editor-fold>
 
+  // <editor-fold> Legacy code - before MIS
+  /*
   // -----------------------------------------------
   // ---------- throughput - LIGHT PATH ------------
   // -----------------------------------------------
+  // <editor-fold> TP Light path
   // check the notebook to understand why this starts with a cosine term, but it
   // has something to do with regrouping the geometric terms. this is only the
   // case if vertex_t > 0 (pure camera paths do not need this)
@@ -84,10 +110,12 @@ static RGB connect_paths(int cam_vertex, int light_vertex, const std::vector<Ver
 
     tp_lp *= brdf * cosV;
   }
+  // </editor-fold>
 
   // ------------------------------------------------
   // ---------- throughput - CAMERA PATH ------------
   // ------------------------------------------------
+  // <editor-fold> TP Camera path
   RGB tp_cp(1.0f);
   for(int i = 1; i < vertex_s; ++i)
   {
@@ -101,6 +129,60 @@ static RGB connect_paths(int cam_vertex, int light_vertex, const std::vector<Ver
 
     tp_cp *= brdf * cosV;
   }
+  // </editor-fold>
+  */
+  // </editor-fold>
+
+  // ----------------------------------------------
+  // ----------- Throughput computation -----------
+  // ----------------------------------------------
+  // <editor-fold> New throughput for MIS
+  // 0. Create three pointers p_last, p_current and p_next which will
+  //    store the working vertices. This is useful to make the loops
+  //    easier to write, without hacking around to account for the light
+  //    and camera vertices. p_last = NULL, p_current = lens, p_next depends
+  //    on the number of camera vertices used.
+  int id_next = (n_cam_vertices == 1) ? vertex_t : vertex_s+1;
+
+  const Vertex* p_last = NULL;
+  const Vertex* p_current = &vertices[vertex_s];
+  const Vertex* p_next = &vertices[id_next];
+
+  // 1. Compute geometric coupling term (GCT) for the lens vertex and the next
+  RGB tp(1.0f);
+  tp *= geometric_coupling(*p_current, *p_next);
+
+  // 2. p_last = lens, p_current = p_next. p_next depends on the number of
+  // camera vertices used, as we need to make it "jump" to the light vertices
+  // section when it reaches the connection point.
+  //
+  // 4. Go to 2 until p_next = light vertex or p_next = last vertex on camera path
+  // !!!!!!!!! CONTINUE FROM HERE!
+  // -> write this loop condition
+  // -> correctly fill vertex (including lens sample)
+  // -> return throughput divided by PDF (the way it is currently written is
+  // already correct). this should yield to the same results as before!
+  while( p_next != &(*vertices.back()) && p_next != &)
+  {
+    // advance pointers. next_id will take care of "jumping" between camera and
+    // light vertices
+    id_next = (id_next == vertex_s) ? vertex_t : id_next+1;
+    p_last = p_current;
+    p_current = p_next;
+    p_next = &vertices[id_next];
+
+    // Compute BRDF(p_last -> p_current -> p_next) and GCT(p_current -> p_next).
+    // The use of BRDF and GCT caches will make this more efficient while keeping
+    // code readable. This is certainly more expensive then storing things and
+    // designing a more complex algorithm to handle things, but the goal is to
+    // keep code easy to understand.
+    RGB brdf = three_point_brdf(*p_last, *p_current, *p_next);
+    float G = geometric_coupling(*p_current, *p_next);
+
+    tp *= (G * brdf);
+  }
+
+  // </editor-fold>
 
   // ---------------------------------------
   // ------------ Full path PDF ------------
@@ -109,15 +191,17 @@ static RGB connect_paths(int cam_vertex, int light_vertex, const std::vector<Ver
   float pdf_lp = 1.0f, pdf_cp = 1.0f;
 
   for(int i = vertices.size()-1; i >= vertex_t; --i)
-    pdf_lp *= vertices[i].pdf;
+    pdf_lp *= vertices[i].pdf_fwd;
   for(int i = 0; i <= vertex_s; ++i)
-    pdf_cp *= vertices[i].pdf;
+    pdf_cp *= vertices[i].pdf_fwd;
 
   path_pdf = pdf_lp * pdf_cp;
 
   //-----------------------------------------------
   // ---------- throughput - CONNECTION -----------
   //-----------------------------------------------
+  // <editor-fold> Legacy code for Connection throughput
+  /*
   // There's no PDF for the junction! the probability of picking this specific
   // path depends only on the probability of selecting the vertices. there's no
   // meaning in computing PDF for the junction, as once we build the subpaths,
@@ -138,6 +222,8 @@ static RGB connect_paths(int cam_vertex, int light_vertex, const std::vector<Ver
 
   RGB brdfVL = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
   RGB brdfVC = v_c.isect.shape->brdf(+v2l, -v_c.last.d, v_c.pos);
+  */
+  // </editor-fold>
 
   // full path throughput
   RGB tp(1.0f);
@@ -163,12 +249,17 @@ RGB Integrator::bd_path(const Scene& scene,
   for( auto& v : vertices )
   {
     v.valid = false;
-    v.pdf = 1.0f;
+    v.pdf_fwd = 1.0f;
+    v.pdf_bwd = 1.0f;
   }
 
   // ---------------------------------------------------
   // ------------------ Camera path --------------------
   // ---------------------------------------------------
+  // TODO: because of the way we're computing the throughput, we now need the
+  // lens sample in the zeroth position! This is good, as make things more
+  // homogeneous.
+
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
   //
@@ -184,7 +275,7 @@ RGB Integrator::bd_path(const Scene& scene,
   first_v.pos = primary_ray(isect.t);
   first_v.last = primary_ray;
   first_v.isect = isect;
-  first_v.pdf = 1.0f;
+  first_v.pdf_fwd = 1.0f;
 
   // keep sampling BRDF and building camera subpath
   int cp_idx = 1;
@@ -203,11 +294,12 @@ RGB Integrator::bd_path(const Scene& scene,
 
     // store vertex. PDFs are stored in solid angle, as the
     // jacobian is cancelled when computing L(x)/pdf(x).
+    // UPDATE: in order
     cp_idx += 1;
 
     Vertex &next_v = vertices[cp_idx];
     next_v.valid = true;
-    next_v.pdf = dir_pdf;
+    next_v.pdf_fwd = dir_pdf * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
     next_v.last = to_next_point;
     next_v.isect = next_isect;
     next_v.pos = to_next_point(next_isect.t);
@@ -237,7 +329,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // cancelled out when we compute L(X)/p(x)).
   Vertex &last = vertices.back();
   last.valid = true;
-  last.pdf = l_p_pdf;
+  last.pdf_fwd = l_p_pdf;
   last.pos = l_p;
   last.isect.normal = l_n;
   last.isect.shape = &l;
@@ -256,7 +348,7 @@ RGB Integrator::bd_path(const Scene& scene,
   last_v.last = l_ray;
   last_v.isect = l_isect;
   last_v.pos = l_ray(l_isect.t);
-  last_v.pdf = l_d_pdf;
+  last_v.pdf_fwd = l_d_pdf * glm::dot(l_isect.normal, -l_d) / l_isect.d2;
 
   // build light subpath by sampling BRDFs.
   // TODO: maybe we won't need to go up to path_length but rather path_length-1,
@@ -284,7 +376,7 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.valid = true;
     next_v.last = next_ray;
     next_v.isect = next_isect;
-    next_v.pdf = pdf_dir;
+    next_v.pdf_fwd = pdf_dir * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
     next_v.pos = next_ray(next_isect.t);
   }
 
