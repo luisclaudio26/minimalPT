@@ -529,12 +529,14 @@ void Integrator::render(const Scene& scene)
 
       // get primary ray and first intersection,
       // then invoke shader to compute the sample value
-      Ray primary_ray = scene.cam.get_primary_ray(uv);
+      //Ray primary_ray = scene.cam.get_primary_ray(uv);
+      Vec3 lens_normal;
+      Ray primary_ray = scene.cam.get_primary_ray(uv, lens_normal);
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
         //rad = pathtracer(scene, primary_ray, isect);
-        rad = bdpt(scene, primary_ray, isect);
+        rad = bdpt(scene, primary_ray, lens_normal, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.

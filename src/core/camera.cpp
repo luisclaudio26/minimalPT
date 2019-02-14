@@ -107,6 +107,14 @@ Ray Camera::get_primary_ray(const Vec2& uv_) const
   return Ray( Vec3(o_worldspace), Vec3(d_worldspace) );
 }
 
+Ray Camera::get_primary_ray(const Vec2& uv_, Vec3& normal) const
+{
+  // This is a thin lens model, so the lens is infinitely thin and thus
+  // the normal is the same everywhere. realistic lens would not be like this
+  normal = -z;
+  return get_primary_ray(uv_);
+}
+
 void Camera::sample_lens(Vec3& pos_world, Vec2& pos_lens, float& pdf) const
 {
   // TODO: precompute and store this

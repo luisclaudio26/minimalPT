@@ -27,11 +27,13 @@ private:
 
   RGB bd_path(const Scene& scene,
               const Ray& primary_ray,
+              const Vec3& lens_normal,
               const Isect& isect,
               int path_length = 2);
 
   RGB bdpt(const Scene& scene,
             const Ray& primary_ray,
+            const Vec3& lens_normal,
             const Isect& isect);
 
   void light_path(const Scene& scene, int path_length = 1);

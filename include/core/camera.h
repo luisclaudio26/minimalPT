@@ -34,6 +34,7 @@ public:
   // same (u,v) will receive contribution from many rays coming from different
   // points of the lens
 	Ray get_primary_ray(const Vec2& uv) const;
+  Ray get_primary_ray(const Vec2& uv, Vec3& normal) const;
 
   void sample_lens(Vec3& pos_world, Vec2& pos_lens, float& pdf) const;
   Vec2 deposit_sample(const Vec2& pos_lens, const Vec3& dir_world) const;

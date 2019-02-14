@@ -19,7 +19,7 @@ typedef struct
   bool valid;      // is this vertex valid or not?
 } Vertex;
 
-static float geometric_coupling(const Vertex& v1, const Vertex& v2)
+static inline float geometric_coupling(const Vertex& v1, const Vertex& v2)
 {
   Vec3 r_ = v2.pos - v1.pos;
   Vec3 r = glm::normalize(r_);
@@ -29,6 +29,15 @@ static float geometric_coupling(const Vertex& v1, const Vertex& v2)
   float N2_r = glm::dot(v2.isect.normal, -r);
 
   return (N1_r * N2_r) / d2;
+}
+
+static inline RGB three_point_brdf(const Vertex& p_last,
+                                    const Vertex& p_current,
+                                    const Vertex& p_next)
+{
+  Vec3 wi = glm::normalize(p_last.pos - p_current.pos);
+  Vec3 wo = glm::normalize(p_next.pos - p_current.pos);
+  return p_current.isect.shape->brdf(wi, wo, p_current.pos);
 }
 
 static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
@@ -61,6 +70,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // TODO: skip visibility check if vertex_t = 0
   // <editor-fold> Visibility check at connection
   // cast shadow ray to check whether vertices see each other
+  // TODO: CRASHES WHEN CONNECTION HAPPENS BETWEEN LENS SAMPLE AND A LIGHT PATH VERTEX
   Vec3 ray_o = v_c.pos + v_c.isect.normal*(v_c.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
   Vec3 ray_d = glm::normalize(v_l.pos - ray_o);
   Ray shadow_ray(ray_o, ray_d); Isect shadow_isect;
@@ -141,11 +151,12 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   //    store the working vertices. This is useful to make the loops
   //    easier to write, without hacking around to account for the light
   //    and camera vertices. p_last = NULL, p_current = lens, p_next depends
-  //    on the number of camera vertices used.
-  int id_next = (n_cam_vertices == 1) ? vertex_t : vertex_s+1;
+  //    on the number of camera vertices used (if we have only one camera vertex,
+  //    the next one should be the first vertex of the light path)
+  int id_next = (n_cam_vertices == 1) ? vertex_t : 1;
 
   const Vertex* p_last = NULL;
-  const Vertex* p_current = &vertices[vertex_s];
+  const Vertex* p_current = &vertices[0];
   const Vertex* p_next = &vertices[id_next];
 
   // 1. Compute geometric coupling term (GCT) for the lens vertex and the next
@@ -158,11 +169,15 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   //
   // 4. Go to 2 until p_next = light vertex or p_next = last vertex on camera path
   // !!!!!!!!! CONTINUE FROM HERE!
-  // -> write this loop condition
   // -> correctly fill vertex (including lens sample)
   // -> return throughput divided by PDF (the way it is currently written is
   // already correct). this should yield to the same results as before!
-  while( p_next != &(*vertices.back()) && p_next != &)
+
+  // the actual halting criteria is: p_next = last vertex OR n_light_vertices = 0
+  // and p_next = last camera vertex. Negate everything and you arrive in the
+  // following expression.
+  while( p_next != &vertices.back()
+        && (n_light_vertices != 0 || p_next != &v_c) )
   {
     // advance pointers. next_id will take care of "jumping" between camera and
     // light vertices
@@ -222,8 +237,6 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
 
   RGB brdfVL = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
   RGB brdfVC = v_c.isect.shape->brdf(+v2l, -v_c.last.d, v_c.pos);
-  */
-  // </editor-fold>
 
   // full path throughput
   RGB tp(1.0f);
@@ -231,12 +244,15 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     tp = tp_cp * (brdfVC * G);
   else
     tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
+    */
+  // </editor-fold>
 
   return tp * vertices.back().isect.shape->emission;
 }
 
 RGB Integrator::bd_path(const Scene& scene,
                         const Ray& primary_ray,
+                        const Vec3& lens_normal,
                         const Isect& isect,
                         int path_length)
 {
@@ -259,6 +275,11 @@ RGB Integrator::bd_path(const Scene& scene,
   // TODO: because of the way we're computing the throughput, we now need the
   // lens sample in the zeroth position! This is good, as make things more
   // homogeneous.
+  Vertex &lens_v = vertices[0];
+  lens_v.valid = true;
+  lens_v.pos = primary_ray.o;
+  lens_v.pdf_fwd = 1.0f; // TODO: place actual lens sample PDF!
+  lens_v.isect.normal = lens_normal; // TODO We the normal at the sample!!!!
 
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
@@ -275,7 +296,8 @@ RGB Integrator::bd_path(const Scene& scene,
   first_v.pos = primary_ray(isect.t);
   first_v.last = primary_ray;
   first_v.isect = isect;
-  first_v.pdf_fwd = 1.0f;
+  first_v.pdf_fwd = 1.0f; // the lens sample completely defines where the second
+                          // vertex we fall i.e. p(x2) = p(x2 | x1) = 1.0 (??)
 
   // keep sampling BRDF and building camera subpath
   int cp_idx = 1;
@@ -446,12 +468,10 @@ RGB Integrator::bd_path(const Scene& scene,
   // weight for balance heuristic needs all the probabilities after building the
   // path using a given connection strategy.
   RGB acc(0.0f); int n_strategies = 0;
-  for(int c = 1; c < path_length-1; ++c)
+  for(int c = 2; c <= path_length; ++c)
   {
-    int l = path_length - 2 - c;
-
     float path_pdf;
-    RGB path_rad = connect_paths(c, l, vertices, scene, path_pdf);
+    RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf);
 
     acc += path_rad * (1.0f / path_pdf);
     n_strategies += 1;
@@ -462,10 +482,14 @@ RGB Integrator::bd_path(const Scene& scene,
 
 RGB Integrator::bdpt(const Scene& scene,
                       const Ray& primary_ray,
+                      const Vec3& lens_normal,
                       const Isect& isect)
 {
   RGB out(0.0f);
-  for(int i = 3; i < 7; ++i) out += bd_path(scene, primary_ray, isect, i);
+  //for(int i = 2; i < 5; ++i) out += bd_path(scene, primary_ray, lens_normal, isect, i);
+
+  out += bd_path(scene, primary_ray, lens_normal, isect, 4);
+
   return out;
 }
 
