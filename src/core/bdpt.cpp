@@ -28,15 +28,26 @@ static inline float geometric_coupling(const Vertex& v1, const Vertex& v2)
   float N1_r = glm::dot(v1.isect.normal, r);
   float N2_r = glm::dot(v2.isect.normal, -r);
 
-  return (N1_r * N2_r) / d2;
+  float out = (N1_r * N2_r) / d2;
+
+  //if( !std::isfinite(out) ) printf("%f\n", d2);
+
+  return out;
 }
 
 static inline RGB three_point_brdf(const Vertex& p_last,
                                     const Vertex& p_current,
                                     const Vertex& p_next)
 {
-  Vec3 wi = glm::normalize(p_last.pos - p_current.pos);
-  Vec3 wo = glm::normalize(p_next.pos - p_current.pos);
+  // TODO: what errors does this introduce? why are they so "correct"
+  // and of random nature, as one would expect from numerical errors
+  // more or less?
+  //Vec3 wi = glm::normalize(p_last.pos - p_current.pos);
+  //Vec3 wo = glm::normalize(p_next.pos - p_current.pos);
+
+  Vec3 wi = -p_current.last.d;
+  Vec3 wo = p_next.last.d;
+
   return p_current.isect.shape->brdf(wi, wo, p_current.pos);
 }
 
@@ -59,7 +70,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
   const Vertex &v_l = vertices[vertex_t];
-  if( !v_l.valid ) return RGB(0.0f); //return RGB(1.0f, 1.0f, 0.0f);
+  if( n_light_vertices > 0 && !v_l.valid ) return RGB(0.0f); //return RGB(1.0f, 1.0f, 0.0f);
 
   const Vertex &v_c = vertices[vertex_s];
   if( !v_c.valid ) return RGB(0.0f); //return RGB(0.0f, 1.0f, 1.0f);
@@ -67,29 +78,33 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // -----------------------------------------
   // ----------- Visibility check ------------
   // -----------------------------------------
-  // TODO: skip visibility check if vertex_t = 0
   // <editor-fold> Visibility check at connection
   // cast shadow ray to check whether vertices see each other
   // TODO: CRASHES WHEN CONNECTION HAPPENS BETWEEN LENS SAMPLE AND A LIGHT PATH VERTEX
-  Vec3 ray_o = v_c.pos + v_c.isect.normal*(v_c.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
-  Vec3 ray_d = glm::normalize(v_l.pos - ray_o);
-  Ray shadow_ray(ray_o, ray_d); Isect shadow_isect;
-  scene.cast_ray(shadow_ray, shadow_isect);
+  // TODO: o problema das quinas que não pegam o color bleed direito é exatamente
+  // aqui na conexão, na estratégia s2t2!
+  if( n_light_vertices > 0 )
+  {
+    Vec3 ray_o = v_c.pos + v_c.isect.normal*(v_c.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+    Vec3 ray_d = glm::normalize(v_l.pos - ray_o);
+    Ray shadow_ray(ray_o, ray_d); Isect shadow_isect;
+    scene.cast_ray(shadow_ray, shadow_isect);
 
-  // two points do not see each other if they reach a surface from opposite sides.
-  // this will happen everytime a light source is behind a thin wall: the shadow
-  // ray will successfully connect the two paths, as intersection will happen at
-  // the very same position, but the do not actually see each other!
-  bool same_side = glm::dot(ray_d, v_l.isect.normal) < 0.0f;
+    // two points do not see each other if they reach a surface from opposite sides.
+    // this will happen everytime a light source is behind a thin wall: the shadow
+    // ray will successfully connect the two paths, as intersection will happen at
+    // the very same position, but the do not actually see each other!
+    bool same_side = glm::dot(ray_d, v_l.isect.normal) < 0.0f;
 
-  // TODO: the numerical problem near the corners is still happening, with rays
-  // cast from the near the corner being missed
-  // TODO: also due to numerical problems, setting distance >= 0.00001f makes
-  // the "disks" appears just like the pathtracer implementation. this means that
-  // the direct lighting is correct!
-  Vec3 shadow_p = shadow_ray(shadow_isect.t);
-  float dist = glm::distance(shadow_p, v_l.pos);
-  if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
+    // TODO: the numerical problem near the corners is still happening, with rays
+    // cast from the near the corner being missed
+    // TODO: also due to numerical problems, setting distance >= 0.00001f makes
+    // the "disks" appears just like the pathtracer implementation. this means that
+    // the direct lighting is correct!
+    Vec3 shadow_p = shadow_ray(shadow_isect.t);
+    float dist = glm::distance(shadow_p, v_l.pos);
+    if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
+  }
   // </editor-fold>
 
   // <editor-fold> Legacy code - before MIS
@@ -194,14 +209,14 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     RGB brdf = three_point_brdf(*p_last, *p_current, *p_next);
     float G = geometric_coupling(*p_current, *p_next);
 
-    tp *= (G * brdf);
+    tp *= G * brdf;
   }
-
   // </editor-fold>
 
   // ---------------------------------------
   // ------------ Full path PDF ------------
   // ---------------------------------------
+  // <editor-fold> Path PDF (pending)
   // run through the whole path accumulating its pdf
   float pdf_lp = 1.0f, pdf_cp = 1.0f;
 
@@ -211,6 +226,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     pdf_cp *= vertices[i].pdf_fwd;
 
   path_pdf = pdf_lp * pdf_cp;
+  // </editor-fold>
 
   //-----------------------------------------------
   // ---------- throughput - CONNECTION -----------
@@ -247,7 +263,11 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     */
   // </editor-fold>
 
-  return tp * vertices.back().isect.shape->emission;
+  RGB emission = n_light_vertices == 0 ?
+                  vertices[vertex_s].isect.shape->emission
+                    : vertices.back().isect.shape->emission;
+
+  return tp * emission;
 }
 
 RGB Integrator::bd_path(const Scene& scene,
@@ -279,7 +299,7 @@ RGB Integrator::bd_path(const Scene& scene,
   lens_v.valid = true;
   lens_v.pos = primary_ray.o;
   lens_v.pdf_fwd = 1.0f; // TODO: place actual lens sample PDF!
-  lens_v.isect.normal = lens_normal; // TODO We the normal at the sample!!!!
+  lens_v.isect.normal = lens_normal;
 
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
@@ -405,6 +425,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // -------------------------------------------
   // ------------ Path connections -------------
   // -------------------------------------------
+  // <editor-fold> Comments on MIS
   // TODO: the optimal way of doing this is to combine all paths using the
   // balance/power heuristics instead of simply averaging everything (which might
   // be causing the darkened look in refractive materials).
@@ -467,17 +488,24 @@ RGB Integrator::bd_path(const Scene& scene,
   // store all the probabilities in forward and reverse directions. The final
   // weight for balance heuristic needs all the probabilities after building the
   // path using a given connection strategy.
+  // </editor-fold>
+
   RGB acc(0.0f); int n_strategies = 0;
   for(int c = 2; c <= path_length; ++c)
   {
     float path_pdf;
     RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf);
-
     acc += path_rad * (1.0f / path_pdf);
+
     n_strategies += 1;
   }
-
   return acc * (1.0f / n_strategies);
+
+  /*
+  float path_pdf;
+  RGB acc = connect_paths(4, 0, vertices, scene, path_pdf);
+  return acc * (1.0f / path_pdf);
+  */
 }
 
 RGB Integrator::bdpt(const Scene& scene,
@@ -485,12 +513,13 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
+  /*
   RGB out(0.0f);
-  //for(int i = 2; i < 5; ++i) out += bd_path(scene, primary_ray, lens_normal, isect, i);
-
-  out += bd_path(scene, primary_ray, lens_normal, isect, 4);
-
+  for(int i = 2; i < 5; ++i) out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
+  */
+
+  return bd_path(scene, primary_ray, lens_normal, isect, 4);
 }
 
 // -----------------------------------------------------------------------------

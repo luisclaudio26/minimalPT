@@ -544,7 +544,8 @@ void Integrator::render(const Scene& scene)
       // TODO: not sure if this should be here or computed inside BD_path, given
       // that this term is the remaining cosine of the sensor geometric coupling
       // term.
-      irradiance_sample = rad * glm::dot(-scene.cam.z, primary_ray.d);
+      irradiance_sample = rad; //* glm::dot(-scene.cam.z, primary_ray.d); <- Now included in geometric term of BDPT.
+                              // But what about the cosine term for the ray incident on the FILM (not the lens)??
 
       // sample splatting
       int sample_add = j*hRes+i;
