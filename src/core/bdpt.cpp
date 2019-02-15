@@ -29,9 +29,6 @@ static inline float geometric_coupling(const Vertex& v1, const Vertex& v2)
   float N2_r = glm::dot(v2.isect.normal, -r);
 
   float out = (N1_r * N2_r) / d2;
-
-  //if( !std::isfinite(out) ) printf("%f\n", d2);
-
   return out;
 }
 
@@ -177,6 +174,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // 1. Compute geometric coupling term (GCT) for the lens vertex and the next
   RGB tp(1.0f);
   tp *= geometric_coupling(*p_current, *p_next);
+  // TODO: REVIEW THIS AS THE FIRST TERM IN THE Throughput COMPUTATION!!!
 
   // 2. p_last = lens, p_current = p_next. p_next depends on the number of
   // camera vertices used, as we need to make it "jump" to the light vertices
@@ -211,6 +209,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
 
     tp *= G * brdf;
   }
+
   // </editor-fold>
 
   // ---------------------------------------
@@ -218,6 +217,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // ---------------------------------------
   // <editor-fold> Path PDF (pending)
   // run through the whole path accumulating its pdf
+  /*
   float pdf_lp = 1.0f, pdf_cp = 1.0f;
 
   for(int i = vertices.size()-1; i >= vertex_t; --i)
@@ -226,6 +226,12 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     pdf_cp *= vertices[i].pdf_fwd;
 
   path_pdf = pdf_lp * pdf_cp;
+  */
+
+  path_pdf = 1.0f;
+  for(int i = 0; i < vertices.size()-1; ++i)
+    path_pdf *= vertices[i].pdf_fwd;
+
   // </editor-fold>
 
   //-----------------------------------------------
@@ -292,6 +298,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // ---------------------------------------------------
   // ------------------ Camera path --------------------
   // ---------------------------------------------------
+  // <editor-fold> Camera path construction
   // TODO: because of the way we're computing the throughput, we now need the
   // lens sample in the zeroth position! This is good, as make things more
   // homogeneous.
@@ -334,6 +341,25 @@ RGB Integrator::bd_path(const Scene& scene,
     Ray to_next_point(ray_o, out_dir); Isect next_isect;
     if( !scene.cast_ray(to_next_point, next_isect) ) break; //TODO: Ray escaped. Do something?
 
+    // -- Hit statistics --
+    // <editor-fold> Hit statistics
+    /*
+    static int n_hit = 0, n_rays = 0;
+
+    static int shape_id = 2;
+    static int origin_id = 3;
+    if( i == 2 && isect.shape == &scene.prims[origin_id] )
+    {
+      n_rays++;
+      if( next_isect.shape == &scene.prims[shape_id] )
+        n_hit++;
+    }
+
+    printf("\r%f%%", (float)100.0f*n_hit/n_rays);
+    */
+    // </editor-fold>
+    // --------------------
+
     // store vertex. PDFs are stored in solid angle, as the
     // jacobian is cancelled when computing L(x)/pdf(x).
     // UPDATE: in order
@@ -346,10 +372,12 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.isect = next_isect;
     next_v.pos = to_next_point(next_isect.t);
   }
+  // </editor-fold>
 
   // -------------------------------------------------------------
   // ----------------------- Light path --------------------------
   // -------------------------------------------------------------
+  //<editor-fold> Light path construction
   // randomly pick a lightsource and sample a point on its surface
   // TODO: this will be biased if we have more than one light source!
   // must consider the case where there's more than one light source,
@@ -421,6 +449,7 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.pdf_fwd = pdf_dir * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
     next_v.pos = next_ray(next_isect.t);
   }
+  // </editor-fold>
 
   // -------------------------------------------
   // ------------ Path connections -------------
@@ -490,6 +519,7 @@ RGB Integrator::bd_path(const Scene& scene,
   // path using a given connection strategy.
   // </editor-fold>
 
+  /*
   RGB acc(0.0f); int n_strategies = 0;
   for(int c = 2; c <= path_length; ++c)
   {
@@ -500,12 +530,15 @@ RGB Integrator::bd_path(const Scene& scene,
     n_strategies += 1;
   }
   return acc * (1.0f / n_strategies);
-
-  /*
-  float path_pdf;
-  RGB acc = connect_paths(4, 0, vertices, scene, path_pdf);
-  return acc * (1.0f / path_pdf);
   */
+
+
+  float path_pdf;
+  RGB acc = connect_paths(3, 0, vertices, scene, path_pdf);
+
+  //printf("(%f %f %f) ", acc.r, acc.g, acc.b);
+  //printf("%f ", path_pdf);
+  return acc * (1.0f / path_pdf);
 }
 
 RGB Integrator::bdpt(const Scene& scene,
@@ -519,7 +552,7 @@ RGB Integrator::bdpt(const Scene& scene,
   return out;
   */
 
-  return bd_path(scene, primary_ray, lens_normal, isect, 4);
+  return bd_path(scene, primary_ray, lens_normal, isect, 3);
 }
 
 // -----------------------------------------------------------------------------
