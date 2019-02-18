@@ -17,6 +17,7 @@ public:
 
   // we'll handle spheres only at first!
   Vec3 o; float r;
+  // TODO: float area;
 
   // material will be a simple Lambertian color
   Vec3 diff_color; MaterialType type; float eta;

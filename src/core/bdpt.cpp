@@ -63,10 +63,10 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
   const Vertex &v_l = vertices[vertex_t];
-  if( n_light_vertices > 0 && !v_l.valid ) return RGB(0.0f); //return RGB(1.0f, 1.0f, 0.0f);
+  if( n_light_vertices > 0 && !v_l.valid ) return RGB(0.0f);
 
   const Vertex &v_c = vertices[vertex_s];
-  if( !v_c.valid ) return RGB(0.0f); //return RGB(0.0f, 1.0f, 1.0f);
+  if( !v_c.valid ) return RGB(0.0f);
 
   // -----------------------------------------
   // ----------- Visibility check ------------
@@ -78,6 +78,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // aqui na conexão, na estratégia s2t2!
   if( n_light_vertices > 0 )
   {
+    // IDEA: This vertex offset position could be moved inside the shadow raycasting routing
     Vec3 ray_o = v_c.pos + v_c.isect.normal*(v_c.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
     Vec3 ray_d = glm::normalize(v_l.pos - ray_o);
     Ray shadow_ray(ray_o, ray_d); Isect shadow_isect;
@@ -94,61 +95,12 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     // TODO: also due to numerical problems, setting distance >= 0.00001f makes
     // the "disks" appears just like the pathtracer implementation. this means that
     // the direct lighting is correct!
+    // -> I have no idea what is going on here!
     Vec3 shadow_p = shadow_ray(shadow_isect.t);
     float dist = glm::distance(shadow_p, v_l.pos);
-    if( !same_side || dist >= 0.0001f ) return RGB(0.0f);
+
+    if( !same_side || dist >= 0.001f ) return RGB(0.0f);
   }
-  // </editor-fold>
-
-  // <editor-fold> Legacy code - before MIS
-  /*
-  // -----------------------------------------------
-  // ---------- throughput - LIGHT PATH ------------
-  // -----------------------------------------------
-  // <editor-fold> TP Light path
-  // check the notebook to understand why this starts with a cosine term, but it
-  // has something to do with regrouping the geometric terms. this is only the
-  // case if vertex_t > 0 (pure camera paths do not need this)
-  RGB tp_lp(1.0f);
-
-  // this first term is only present if we have an actual light path (not only
-  // using the light sample alone)
-  if( light_vertex > 0 )
-    tp_lp *= glm::dot(vertices.back().isect.normal, vertices[vertices.size()-2].last.d);
-
-  for(int i = vertices.size()-2; i > vertex_t; --i)
-  {
-    const Vertex &v = vertices[i];
-    Vec3 out_dir = vertices[i-1].last.d;
-
-    RGB brdf = v.isect.shape->brdf(-v.last.d, out_dir, v.pos);
-
-    float cosV = glm::dot(v.isect.normal, out_dir);
-    if( v.isect.shape->type == GLASS ) cosV *= -1.0f;
-
-    tp_lp *= brdf * cosV;
-  }
-  // </editor-fold>
-
-  // ------------------------------------------------
-  // ---------- throughput - CAMERA PATH ------------
-  // ------------------------------------------------
-  // <editor-fold> TP Camera path
-  RGB tp_cp(1.0f);
-  for(int i = 1; i < vertex_s; ++i)
-  {
-    const Vertex &v = vertices[i];
-    Vec3 out_dir = vertices[i+1].last.d;
-
-    RGB brdf = v.isect.shape->brdf(-v.last.d, out_dir, v.pos);
-
-    float cosV = glm::dot(v.isect.normal, out_dir);
-    if( v.isect.shape->type == GLASS ) cosV *= -1.0f;
-
-    tp_cp *= brdf * cosV;
-  }
-  // </editor-fold>
-  */
   // </editor-fold>
 
   // ----------------------------------------------
@@ -167,29 +119,12 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   const Vertex* p_current = &vertices[0];
   const Vertex* p_next = &vertices[id_next];
 
-  // 1. Compute geometric coupling term (GCT) for the lens vertex and the next
   RGB tp(1.0f);
-
-  //tp *= geometric_coupling(*p_current, *p_next);
-  // TODO: REVIEW THIS AS THE FIRST TERM IN THE Throughput COMPUTATION!!!
-  // UPDATE: maybe this should only appear if we were integrating over radiance
-  // to extract the final measure. this pathsampling routine, however, is
-  // interested in radiance only
-
-  // 2. p_last = lens, p_current = p_next. p_next depends on the number of
-  // camera vertices used, as we need to make it "jump" to the light vertices
-  // section when it reaches the connection point.
-  //
-  // 4. Go to 2 until p_next = light vertex or p_next = last vertex on camera path
-  // !!!!!!!!! CONTINUE FROM HERE!
-  // -> correctly fill vertex (including lens sample)
-  // -> return throughput divided by PDF (the way it is currently written is
-  // already correct). this should yield to the same results as before!
+  path_pdf *= vertices[0].pdf_fwd;
 
   // the actual halting criteria is: p_next = last vertex OR n_light_vertices = 0
   // and p_next = last camera vertex. Negate everything and you arrive in the
   // following expression.
-  path_pdf *= vertices[0].pdf_fwd;
   while( p_next != &vertices.back()
         && (n_light_vertices != 0 || p_next != &v_c) )
   {
@@ -211,67 +146,18 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     tp *= G * brdf;
     path_pdf *= p_current->pdf_fwd;
   }
+
+  // PDF of the last vertex
   path_pdf *= p_next->pdf_fwd;
 
   // </editor-fold>
 
-  // ---------------------------------------
-  // ------------ Full path PDF ------------
-  // ---------------------------------------
-  // <editor-fold> Path PDF (pending)
-  // run through the whole path accumulating its pdf
-  /*
-  float pdf_lp = 1.0f, pdf_cp = 1.0f;
+  // ----------------------------------------------
+  // ----------- MIS weight computation -----------
+  // ----------------------------------------------
+  // <editor-fold> MIS weight
 
-  for(int i = vertices.size()-1; i >= vertex_t; --i)
-    pdf_lp *= vertices[i].pdf_fwd;
-  for(int i = 0; i <= vertex_s; ++i)
-    pdf_cp *= vertices[i].pdf_fwd;
 
-  path_pdf = pdf_lp * pdf_cp;
-  */
-
-  /*
-  path_pdf = 1.0f;
-  for(int i = 0; i < vertices.size()-1; ++i)
-    path_pdf *= vertices[i].pdf_fwd;
-  */
-
-  // </editor-fold>
-
-  //-----------------------------------------------
-  // ---------- throughput - CONNECTION -----------
-  //-----------------------------------------------
-  // <editor-fold> Legacy code for Connection throughput
-  /*
-  // There's no PDF for the junction! the probability of picking this specific
-  // path depends only on the probability of selecting the vertices. there's no
-  // meaning in computing PDF for the junction, as once we build the subpaths,
-  // we have chance 1 of connecting them, let's say (?)
-  Vec3 v2l_ = v_l.pos - v_c.pos;
-  Vec3 v2l = glm::normalize(v2l_);
-
-  // geometric coupling term and BRDFs for the connection point
-  // TODO: care for the GLASS BRDFs here!
-  float G_cosVC = glm::max(0.0f, glm::dot(v_c.isect.normal, +v2l));
-  if( v_c.isect.shape->type == GLASS ) G_cosVC *= -1.0f;
-
-  float G_cosVL = glm::max(0.0f, glm::dot(v_l.isect.normal, -v2l));
-  if( v_l.isect.shape->type == GLASS ) G_cosVL *= -1.0f;
-
-  float G_r2 = glm::dot(v2l_, v2l_);
-  float G = (G_cosVC * G_cosVL) / G_r2;
-
-  RGB brdfVL = v_l.isect.shape->brdf(-v2l, -v_l.last.d, v_l.pos);
-  RGB brdfVC = v_c.isect.shape->brdf(+v2l, -v_c.last.d, v_c.pos);
-
-  // full path throughput
-  RGB tp(1.0f);
-  if( light_vertex == 0 )
-    tp = tp_cp * (brdfVC * G);
-  else
-    tp = tp_cp * (brdfVC * G * brdfVL) * tp_lp;
-    */
   // </editor-fold>
 
   RGB emission = n_light_vertices == 0 ?
@@ -310,8 +196,9 @@ RGB Integrator::bd_path(const Scene& scene,
   Vertex &lens_v = vertices[0];
   lens_v.valid = true;
   lens_v.pos = primary_ray.o;
-  lens_v.pdf_fwd = 1.0f; // TODO: place actual lens sample PDF!
   lens_v.isect.normal = lens_normal;
+  lens_v.pdf_fwd = 1.0f; // TODO: place actual lens sample PDF!
+  lens_v.pdf_bwd = -1.0f; // TODO: BRDF sample from first_v
 
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
@@ -330,53 +217,59 @@ RGB Integrator::bd_path(const Scene& scene,
   first_v.isect = isect;
   first_v.pdf_fwd = 1.0f; // the lens sample completely defines where the second
                           // vertex we fall i.e. p(x2) = p(x2 | x1) = 1.0 (??)
+  first_v.pdf_bwd = -1.0f; //TODO: BRDF sample from vertices[2]
 
   // keep sampling BRDF and building camera subpath
   int cp_idx = 1;
   for(int i = 2; i < path_length; ++i)
   {
-    Vertex &v = vertices[cp_idx];
+    Vertex &cur_v = vertices[cp_idx];
 
     // sample BRDF for outgoing direction
     float dir_pdf;
-    Vec3 out_dir = v.isect.shape->sample_brdf(v.pos, -v.last.d, dir_pdf);
+    Vec3 out_dir = cur_v.isect.shape->sample_brdf(cur_v.pos, -cur_v.last.d, dir_pdf);
 
     // cast ray in the sampled direction
-    Vec3 ray_o = v.pos + v.isect.normal*(v.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
-    Ray to_next_point(ray_o, out_dir); Isect next_isect;
-    if( !scene.cast_ray(to_next_point, next_isect) ) break; //TODO: Ray escaped. Do something?
+    Vec3 ray_o = cur_v.pos + cur_v.isect.normal*(cur_v.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+    Ray cur_to_next(ray_o, out_dir); Isect next_isect;
+    if( !scene.cast_ray(cur_to_next, next_isect) ) break; //TODO: Ray escaped. Do something?
 
-    // -- Hit statistics --
-    // <editor-fold> Hit statistics
-    /*
-    static int n_hit = 0, n_rays = 0;
-
-    static int shape_id = 2;
-    static int origin_id = 3;
-    if( i == 2 && isect.shape == &scene.prims[origin_id] )
-    {
-      n_rays++;
-      if( next_isect.shape == &scene.prims[shape_id] )
-        n_hit++;
-    }
-
-    printf("\r%f%%", (float)100.0f*n_hit/n_rays);
-    */
-    // </editor-fold>
-    // --------------------
-
-    // store vertex. PDFs are stored in solid angle, as the
-    // jacobian is cancelled when computing L(x)/pdf(x).
-    // UPDATE: in order
+    // store new vertex
     cp_idx += 1;
 
     Vertex &next_v = vertices[cp_idx];
     next_v.valid = true;
-    next_v.pdf_fwd = dir_pdf * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
-    next_v.last = to_next_point;
+    next_v.last = cur_to_next;
     next_v.isect = next_isect;
-    next_v.pos = to_next_point(next_isect.t);
+    next_v.pos = cur_to_next(next_isect.t);
+    next_v.pdf_fwd = dir_pdf * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
+
+    // backward probability: this is the PDF of the CURRENT vertex being chosen
+    // by NEXT, while the forward probability is the PDF of the NEXT vertex being
+    // chosen by the CURRENT one - all in a "BRDF sampling" sense.
+    Vertex &last_v = vertices[cp_idx-2];
+    float dir_pdf_bwd = cur_v.isect.shape->pdf_brdf(cur_to_next.d, -cur_v.last.d, cur_v.pos);
+
+    // cur_v.isect.d2 => distance between last_v and cur_v
+    // cur_v.last.d => direction of the ray linking last_v to cur_v (in this order)
+    last_v.pdf_bwd = dir_pdf_bwd * glm::dot(last_v.isect.normal, cur_v.last.d) / cur_v.isect.d2;
   }
+
+  // The work done on the loop does not computed backward probabilities for the
+  // last two vertices on the camera path:
+  // P( last vertex ) = 1.0f / TotalEmissiveArea, if it is a light source; 0 otherwise
+  Vertex &last_cam = vertices[path_length-1];
+  Vertex &last_but_one = vertices[path_length-2];
+
+  if( last_cam.shape->emission == RGB(0.0f) )
+    last_cam.pdf_bwd = last_but_one.pdf_bwd = 0.0f;
+  else
+  {
+    // TODO
+    //last_cam.pdf_bwd = 1.0f / EmissiveArea;
+    //last_but_one.pdf_bwd = sample_cosine(...).cos()/d2...
+  }
+
   // </editor-fold>
 
   // -------------------------------------------------------------
@@ -524,7 +417,6 @@ RGB Integrator::bd_path(const Scene& scene,
   // path using a given connection strategy.
   // </editor-fold>
 
-  /*
   RGB acc(0.0f); int n_strategies = 0;
   for(int c = 2; c <= path_length; ++c)
   {
@@ -535,11 +427,12 @@ RGB Integrator::bd_path(const Scene& scene,
     n_strategies += 1;
   }
   return acc * (1.0f / n_strategies);
-  */
 
+  /*
   float path_pdf;
-  RGB acc = connect_paths(2, 2, vertices, scene, path_pdf);
+  RGB acc = connect_paths(2, 3, vertices, scene, path_pdf);
   return acc * (1.0f / path_pdf);
+  */
 }
 
 RGB Integrator::bdpt(const Scene& scene,
@@ -549,11 +442,12 @@ RGB Integrator::bdpt(const Scene& scene,
 {
   /*
   RGB out(0.0f);
-  for(int i = 2; i < 5; ++i) out += bd_path(scene, primary_ray, lens_normal, isect, i);
+  for(int i = 2; i <= 7; ++i)
+    out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
   */
 
-  return bd_path(scene, primary_ray, lens_normal, isect, 4);
+  return bd_path(scene, primary_ray, lens_normal, isect, 3);
 }
 
 // -----------------------------------------------------------------------------
