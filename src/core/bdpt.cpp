@@ -5,10 +5,6 @@
 #include <thread>
 #include <vector>
 
-// THE FIRST TESTS SEEM TO BE OK OVERALL AND CONVERGENCE SPEED FOR THE HARD TEST
-// SCENES IS REASONABLE. HOWEVER, IMAGES ARE A BIT DARKER THEN THEY SHOULD, MAINLY
-// ON THE SPECULAR MATERIALS. MAYBE SOME MISSING COSINES OR DIVISIONS BY PI?
-
 typedef struct
 {
   Isect isect;     // intersection info
@@ -173,8 +169,12 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
 
   // 1. Compute geometric coupling term (GCT) for the lens vertex and the next
   RGB tp(1.0f);
-  tp *= geometric_coupling(*p_current, *p_next);
+
+  //tp *= geometric_coupling(*p_current, *p_next);
   // TODO: REVIEW THIS AS THE FIRST TERM IN THE Throughput COMPUTATION!!!
+  // UPDATE: maybe this should only appear if we were integrating over radiance
+  // to extract the final measure. this pathsampling routine, however, is
+  // interested in radiance only
 
   // 2. p_last = lens, p_current = p_next. p_next depends on the number of
   // camera vertices used, as we need to make it "jump" to the light vertices
@@ -189,6 +189,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // the actual halting criteria is: p_next = last vertex OR n_light_vertices = 0
   // and p_next = last camera vertex. Negate everything and you arrive in the
   // following expression.
+  path_pdf *= vertices[0].pdf_fwd;
   while( p_next != &vertices.back()
         && (n_light_vertices != 0 || p_next != &v_c) )
   {
@@ -208,7 +209,9 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     float G = geometric_coupling(*p_current, *p_next);
 
     tp *= G * brdf;
+    path_pdf *= p_current->pdf_fwd;
   }
+  path_pdf *= p_next->pdf_fwd;
 
   // </editor-fold>
 
@@ -228,9 +231,11 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   path_pdf = pdf_lp * pdf_cp;
   */
 
+  /*
   path_pdf = 1.0f;
   for(int i = 0; i < vertices.size()-1; ++i)
     path_pdf *= vertices[i].pdf_fwd;
+  */
 
   // </editor-fold>
 
@@ -532,12 +537,8 @@ RGB Integrator::bd_path(const Scene& scene,
   return acc * (1.0f / n_strategies);
   */
 
-
   float path_pdf;
-  RGB acc = connect_paths(3, 0, vertices, scene, path_pdf);
-
-  //printf("(%f %f %f) ", acc.r, acc.g, acc.b);
-  //printf("%f ", path_pdf);
+  RGB acc = connect_paths(2, 2, vertices, scene, path_pdf);
   return acc * (1.0f / path_pdf);
 }
 
@@ -552,7 +553,7 @@ RGB Integrator::bdpt(const Scene& scene,
   return out;
   */
 
-  return bd_path(scene, primary_ray, lens_normal, isect, 3);
+  return bd_path(scene, primary_ray, lens_normal, isect, 4);
 }
 
 // -----------------------------------------------------------------------------

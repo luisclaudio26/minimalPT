@@ -248,8 +248,8 @@ RGB Integrator::camera_path(const Scene& scene,
   // final contribution of this radiance path
   //return rad_ls*w_light/pdf_ls + rad_brdf*w_brdf/pdf_brdf;
 
-  //return rad_ls * (1.0f / pdf_ls);
-  return rad_brdf * (1.0f / pdf_brdf);
+  return rad_ls * (1.0f / pdf_ls);
+  //return rad_brdf * (1.0f / pdf_brdf);
 }
 
 RGB Integrator::pathtracer(const Scene& scene,
@@ -268,7 +268,7 @@ RGB Integrator::pathtracer(const Scene& scene,
   return rad;
   */
 
-  return camera_path(scene, primary_ray, isect, 2);
+  return camera_path(scene, primary_ray, isect, 3);
 }
 
 RGB Integrator::normal_shading(const Scene& scene,
