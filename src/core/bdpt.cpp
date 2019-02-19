@@ -186,8 +186,13 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // path PDF expression (which is initially the product of all the forward PDFs)
   float pdf_strat_fwd = path_pdf;
 
-  pdf_strat_fwd *= (conn_pdf_fwd / vertices[vertex_t].pdf_fwd);
-  den += pdf_strat_fwd;
+  // PROBLEM 1. If we use no light vertices, we have no connection PDF and this
+  // should be executed.
+  if( n_light_vertices > 0 )
+  {
+    pdf_strat_fwd *= (conn_pdf_fwd / vertices[vertex_t].pdf_fwd);
+    den += pdf_strat_fwd;
+  }
 
   for(int i = vertex_t+1; i < vertices.size(); ++i)
   {
@@ -200,8 +205,25 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // vertices
   float pdf_strat_bwd = path_pdf;
 
-  pdf_strat_bwd *= (conn_pdf_bwd / vertices[vertex_s].pdf_fwd);
-  den += pdf_strat_bwd;
+  // PROBLEM 2. Again, if we have no light vertices, there's no connection PDF
+  // and this should not be executed.
+  // PROBLEM 3. If there's no connection PDF, this is a full camera path and
+  // the first vertex must be initialized with bwd directly.
+  // PROBLEM 4: If we have only two camera vertices, this is a "full light path"
+  // and we should not touch the camera vertices
+  if( n_cam_vertices > 2 )
+  {
+    if( n_light_vertices == 0 )
+    {
+      pdf_strat_bwd *= (vertices[vertex_s].pdf_bwd / vertices[vertex_s].pdf_fwd);
+    }
+    else
+    {
+      pdf_strat_bwd *= (conn_pdf_bwd / vertices[vertex_s].pdf_fwd);
+    }
+
+    den += pdf_strat_bwd;
+  }
 
   for(int i = vertex_s-1; i > 1; --i)
   {
@@ -211,6 +233,9 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
 
   // final weight according to balance heuristic
   weight = path_pdf / den;
+
+  // TODO: ALL OF SUDDEN WEIGHTS START TO BECOME NEGATIVE!!!
+  //if( weight < 0 ) printf("!");
 
   // </editor-fold>
 
@@ -513,7 +538,7 @@ RGB Integrator::bdpt(const Scene& scene,
   return out;
   */
 
-  return bd_path(scene, primary_ray, lens_normal, isect, 3);
+  return bd_path(scene, primary_ray, lens_normal, isect, 4);
 }
 
 // -----------------------------------------------------------------------------
