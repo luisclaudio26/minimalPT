@@ -46,7 +46,7 @@ static inline RGB three_point_brdf(const Vertex& p_last,
 
 static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
                           const std::vector<Vertex>& vertices,
-                          const Scene& scene, float& path_pdf)
+                          const Scene& scene, float& path_pdf, float& weight)
 {
   // UPDATE: the semantics of cam_vertex/light_vertex are now:
   // n_cam_vertices and n_light_vertices, meaning how many vertices
@@ -76,6 +76,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // TODO: CRASHES WHEN CONNECTION HAPPENS BETWEEN LENS SAMPLE AND A LIGHT PATH VERTEX
   // TODO: o problema das quinas que não pegam o color bleed direito é exatamente
   // aqui na conexão, na estratégia s2t2!
+  float conn_pdf_fwd = -1.0f, conn_pdf_bwd = -1.0f;
   if( n_light_vertices > 0 )
   {
     // IDEA: This vertex offset position could be moved inside the shadow raycasting routing
@@ -90,6 +91,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     // the very same position, but the do not actually see each other!
     bool same_side = glm::dot(ray_d, v_l.isect.normal) < 0.0f;
 
+    // bail out returning zero if the vertices do not see each other
     // TODO: the numerical problem near the corners is still happening, with rays
     // cast from the near the corner being missed
     // TODO: also due to numerical problems, setting distance >= 0.00001f makes
@@ -98,8 +100,25 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
     // -> I have no idea what is going on here!
     Vec3 shadow_p = shadow_ray(shadow_isect.t);
     float dist = glm::distance(shadow_p, v_l.pos);
-
     if( !same_side || dist >= 0.001f ) return RGB(0.0f);
+
+    // if the vertices see each other, compute the pdfs of this connection
+    Vec3 v2l_ = v_l.pos - v_c.pos;
+    Vec3 v2l = glm::normalize(v2l_);
+    float _over_v2l_d2 = 1.0f / glm::dot(v2l_, v2l_);
+
+    float fwd_dir = v_c.isect.shape->pdf_brdf(-v_c.last.d, v2l, v_c.pos);
+
+    // handles the case where the light vertex is on the light source (thus no
+    // BRDF to sample, but only the plain uniform hemisphere sampling)
+    // TODO: better handle the light sampling here!
+    float bwd_dir;
+    if( n_light_vertices == 1 ) bwd_dir = _over2pi;
+    else bwd_dir = v_l.isect.shape->pdf_brdf(-v_l.last.d, -v2l, v_l.pos);
+
+    // solid angle to surface area conversion
+    conn_pdf_fwd = fwd_dir * glm::dot(v_l.isect.normal, -v2l) * _over_v2l_d2;
+    conn_pdf_bwd = bwd_dir * glm::dot(v_c.isect.normal, v2l) * _over_v2l_d2;
   }
   // </editor-fold>
 
@@ -157,9 +176,45 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // ----------------------------------------------
   // <editor-fold> MIS weight
 
+  // denominator of Balance heuristic
+  float den = path_pdf;
+
+  // expand path PDF in the FORWARD sense (towards the light source)
+  // The first vertex is inverted using the connection PDF, as this is the
+  // VERTEX_S - VERTEX_T connection. The other strategies have their PDF computed
+  // by simply changing the forward PDFs by their backward counterparts in the
+  // path PDF expression (which is initially the product of all the forward PDFs)
+  float pdf_strat_fwd = path_pdf;
+
+  pdf_strat_fwd *= (conn_pdf_fwd / vertices[vertex_t].pdf_fwd);
+  den += pdf_strat_fwd;
+
+  for(int i = vertex_s+2; i < vertices.size(); ++i)
+  {
+    pdf_strat_fwd *= (vertices[i].pdf_bwd / vertices[i].pdf_fwd);
+    den += pdf_strat_fwd;
+  }
+
+  // expand PDF in the backward sense (towards the camera)
+  // We stop before the first vertex as every strategy has at least two camera
+  // vertices
+  float pdf_strat_bwd = path_pdf;
+
+  pdf_strat_bwd *= (conn_pdf_bwd / vertices[vertex_s].pdf_fwd);
+  den += pdf_strat_bwd;
+
+  for(int i = vertex_s-1; i > 1; --i)
+  {
+    pdf_strat_bwd *= (vertices[i].pdf_bwd / vertices[i].pdf_fwd);
+    den += pdf_strat_bwd;
+  }
+
+  // final weight according to balance heuristic
+  weight = path_pdf / den;
 
   // </editor-fold>
 
+  // radiance carried over this path
   RGB emission = n_light_vertices == 0 ?
                   vertices[vertex_s].isect.shape->emission
                     : vertices.back().isect.shape->emission;
@@ -429,16 +484,15 @@ RGB Integrator::bd_path(const Scene& scene,
   // path using a given connection strategy.
   // </editor-fold>
 
-  RGB acc(0.0f); int n_strategies = 0;
+  RGB acc(0.0f);
   for(int c = 2; c <= path_length; ++c)
   {
-    float path_pdf;
-    RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf);
-    acc += path_rad * (1.0f / path_pdf);
-
-    n_strategies += 1;
+    float path_pdf, weight;
+    RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf, weight);
+    acc += path_rad * (weight / path_pdf);
   }
-  return acc * (1.0f / n_strategies);
+
+  return acc;
 
   /*
   float path_pdf;
