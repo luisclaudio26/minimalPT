@@ -11,21 +11,25 @@ typedef enum {
 
 class Shape
 {
+private:
+    float a;
+
 public:
   Shape(const Vec3& o, float r)
-    : o(o), r(r), diff_color(0.0f,0.0f,0.0f), emission(0.0f), type(LAMBERTIAN), eta(1.0f) { }
+    : o(o), r(r), diff_color(0.0f), emission(0.0f),
+      type(LAMBERTIAN), eta(1.0f), a(4.0f*PI*r*r) { }
 
   // we'll handle spheres only at first!
   Vec3 o; float r;
-  // TODO: float area;
 
   // material will be a simple Lambertian color
-  Vec3 diff_color; MaterialType type; float eta;
+  RGB diff_color; MaterialType type; float eta;
   RGB brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
   Vec3 sample_brdf(const Vec3& p, const Vec3& in, float& pdf_solidangle) const;
   float pdf_brdf(const Vec3& in, const Vec3& out, const Vec3& p) const;
 
   // geometry related stuff
+  inline float area() const { return a; }
   bool intersect(const Ray& r, Isect& tgt) const;
   void sample_surface(Vec3& point, Vec3& normal, float& pdf_area) const;
 

@@ -183,16 +183,13 @@ RGB Integrator::bd_path(const Scene& scene,
   {
     v.valid = false;
     v.pdf_fwd = 1.0f;
-    v.pdf_bwd = 1.0f;
+    v.pdf_bwd = -1.0f;
   }
 
   // ---------------------------------------------------
   // ------------------ Camera path --------------------
   // ---------------------------------------------------
   // <editor-fold> Camera path construction
-  // TODO: because of the way we're computing the throughput, we now need the
-  // lens sample in the zeroth position! This is good, as make things more
-  // homogeneous.
   Vertex &lens_v = vertices[0];
   lens_v.valid = true;
   lens_v.pos = primary_ray.o;
@@ -261,13 +258,16 @@ RGB Integrator::bd_path(const Scene& scene,
   Vertex &last_cam = vertices[path_length-1];
   Vertex &last_but_one = vertices[path_length-2];
 
-  if( last_cam.shape->emission == RGB(0.0f) )
+  if( !last_cam.isect.shape || last_cam.isect.shape->emission == RGB(0.0f) )
     last_cam.pdf_bwd = last_but_one.pdf_bwd = 0.0f;
   else
   {
-    // TODO
-    //last_cam.pdf_bwd = 1.0f / EmissiveArea;
-    //last_but_one.pdf_bwd = sample_cosine(...).cos()/d2...
+    last_cam.pdf_bwd = 1.0f / scene.emissive_area();
+
+    // TODO this assumes all lights are diffuse and sampled using uniform
+    // hemisphere sampling! that's an awful lot of hard coded stuff
+    const float pdf_uniform_hemisphere = _over2pi;
+    last_but_one.pdf_bwd = pdf_uniform_hemisphere * glm::dot(last_but_one.isect.normal, last_but_one.last.d) / last_but_one.isect.d2;
   }
 
   // </editor-fold>
@@ -298,6 +298,7 @@ RGB Integrator::bd_path(const Scene& scene,
   Vertex &last = vertices.back();
   last.valid = true;
   last.pdf_fwd = l_p_pdf;
+  last.pdf_bwd = -1.0f;
   last.pos = l_p;
   last.isect.normal = l_n;
   last.isect.shape = &l;
@@ -317,6 +318,7 @@ RGB Integrator::bd_path(const Scene& scene,
   last_v.isect = l_isect;
   last_v.pos = l_ray(l_isect.t);
   last_v.pdf_fwd = l_d_pdf * glm::dot(l_isect.normal, -l_d) / l_isect.d2;
+  last_v.pdf_bwd = -1.0f;
 
   // build light subpath by sampling BRDFs.
   // TODO: maybe we won't need to go up to path_length but rather path_length-1,
@@ -327,13 +329,14 @@ RGB Integrator::bd_path(const Scene& scene,
   for(int i = 2; i < path_length; ++i)
   {
     // get current vertex, its position and sample BRDF
-    Vertex &v = vertices[lp_idx];
+    Vertex &cur_v = vertices[lp_idx];
+    Vertex &last_v = vertices[lp_idx+1];
 
     float pdf_dir;
-    Vec3 out_dir = v.isect.shape->sample_brdf(v.pos, -v.last.d, pdf_dir);
+    Vec3 out_dir = cur_v.isect.shape->sample_brdf(cur_v.pos, -cur_v.last.d, pdf_dir);
 
     // cast ray in this direction to get next vertex
-    Vec3 ray_o = v.pos + v.isect.normal * (v.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+    Vec3 ray_o = cur_v.pos + cur_v.isect.normal * (cur_v.isect.shape->type == GLASS ? -0.0001f : 0.0001f);
     Ray next_ray(ray_o, out_dir); Isect next_isect;
     if( !scene.cast_ray(next_ray, next_isect) ) break; //TODO: ray escaped. do something?
 
@@ -346,8 +349,17 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.isect = next_isect;
     next_v.pdf_fwd = pdf_dir * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
     next_v.pos = next_ray(next_isect.t);
+
+    // from the second vertex on we can start computing the backward PDFs
+    float dir_pdf_bwd = cur_v.isect.shape->pdf_brdf(next_v.last.d, -cur_v.last.d, cur_v.pos);
+    last_v.pdf_bwd = dir_pdf_bwd * glm::dot(last_v.isect.normal, cur_v.last.d) / cur_v.isect.d2;
   }
   // </editor-fold>
+
+  // The way we coded, the last two vertices will have their backward PDFs set to
+  // -1. This is not a problem, as we never use the last vertices of a light path
+  // because we need camera subpaths to be of length at least 2.
+  // TODO: This is something we could optimize!
 
   // -------------------------------------------
   // ------------ Path connections -------------

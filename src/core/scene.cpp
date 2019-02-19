@@ -35,5 +35,8 @@ void Scene::add_primitive(const Shape& s)
 
   // check whether s is emissive or not and if yes, push its index
   if(s.emission.r > 0.0f || s.emission.g > 0.0f || s.emission.b > 0.0f)
+  {
     emissive_prims.push_back( prims.size()-1 );
+    em_area += s.area();
+  }
 }

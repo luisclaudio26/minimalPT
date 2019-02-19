@@ -17,8 +17,6 @@ bool Shape::intersect(const Ray& ray, Isect& tgt) const
   float c = glm::dot(oc,oc) - r*r;
   float delta = b*b-4*c;
 
-  //printf("(%f %f %f %f %f) ", a, b, c, delta, glm::length(oc));
-
   // no intersection!
   if(delta < 0.0f) return false;
 
