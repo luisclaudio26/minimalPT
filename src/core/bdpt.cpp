@@ -189,7 +189,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   pdf_strat_fwd *= (conn_pdf_fwd / vertices[vertex_t].pdf_fwd);
   den += pdf_strat_fwd;
 
-  for(int i = vertex_s+2; i < vertices.size(); ++i)
+  for(int i = vertex_t+1; i < vertices.size(); ++i)
   {
     pdf_strat_fwd *= (vertices[i].pdf_bwd / vertices[i].pdf_fwd);
     den += pdf_strat_fwd;
