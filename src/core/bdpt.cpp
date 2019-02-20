@@ -176,6 +176,13 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // ----------------------------------------------
   // <editor-fold> MIS weight
 
+  /*
+  if( vertices[vertex_s].isect.shape && vertices[vertex_s].isect.shape->emission.r > 0.0f )
+  {
+    printf("%f | ", path_pdf);
+  }
+  */
+
   // denominator of Balance heuristic
   float den = path_pdf;
 
@@ -233,11 +240,6 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
 
   // final weight according to balance heuristic
   weight = path_pdf / den;
-
-  //if( vertices[vertex_s].isect.shape->emission.r > 0.0f ) printf("%f %f %f %f | ", vertices[vertex_s].pdf_bwd, weight, path_pdf, den);
-
-  // TODO: ALL OF SUDDEN WEIGHTS START TO BECOME NEGATIVE!!!
-  //if( weight < 0 ) printf("!");
 
   // </editor-fold>
 
@@ -303,6 +305,7 @@ RGB Integrator::bd_path(const Scene& scene,
   for(int i = 2; i < path_length; ++i)
   {
     Vertex &cur_v = vertices[cp_idx];
+    Vertex &last_v = vertices[cp_idx-1];
 
     // sample BRDF for outgoing direction
     float dir_pdf;
@@ -323,11 +326,10 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.pos = cur_to_next(next_isect.t);
     next_v.pdf_fwd = dir_pdf * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
 
-    // backward probability: this is the PDF of the CURRENT vertex being chosen
-    // by NEXT, while the forward probability is the PDF of the NEXT vertex being
+    // backward probability: this is the PDF of the LAST vertex being chosen
+    // by CURRENT, while the forward probability is the PDF of the NEXT vertex being
     // chosen by the CURRENT one - all in a "BRDF sampling" sense.
-    Vertex &last_v = vertices[cp_idx-2];
-    float dir_pdf_bwd = cur_v.isect.shape->pdf_brdf(cur_to_next.d, -cur_v.last.d, cur_v.pos);
+    float dir_pdf_bwd = cur_v.isect.shape->pdf_brdf(out_dir, -cur_v.last.d, cur_v.pos);
 
     // cur_v.isect.d2 => distance between last_v and cur_v
     // cur_v.last.d => direction of the ray linking last_v to cur_v (in this order)
@@ -349,7 +351,7 @@ RGB Integrator::bd_path(const Scene& scene,
     // TODO this assumes all lights are diffuse and sampled using uniform
     // hemisphere sampling! that's an awful lot of hard coded stuff
     const float pdf_uniform_hemisphere = _over2pi;
-    last_but_one.pdf_bwd = pdf_uniform_hemisphere * glm::dot(last_but_one.isect.normal, last_but_one.last.d) / last_but_one.isect.d2;
+    last_but_one.pdf_bwd = pdf_uniform_hemisphere * glm::dot(last_but_one.isect.normal, last_cam.last.d) / last_cam.isect.d2;
   }
 
   // </editor-fold>
@@ -518,12 +520,11 @@ RGB Integrator::bd_path(const Scene& scene,
     RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf, weight);
     acc += path_rad * (weight / path_pdf);
   }
-
   return acc;
 
   /*
   float path_pdf, weight;
-  RGB acc = connect_paths(3, 0, vertices, scene, path_pdf, weight);
+  RGB acc = connect_paths(4, 0, vertices, scene, path_pdf, weight);
   return acc * (weight / path_pdf);
   */
 }
@@ -537,7 +538,6 @@ RGB Integrator::bdpt(const Scene& scene,
   for(int i = 2; i <= 7; ++i)
     out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
-
 
   //return bd_path(scene, primary_ray, lens_normal, isect, 4);
 }

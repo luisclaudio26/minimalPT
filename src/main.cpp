@@ -62,6 +62,10 @@ int main(int argc, char** args)
   ball_light.diff_color = RGB(0.0f, 0.0f, 0.0f);
   scene.add_primitive(ball_light);
 
+  Shape ball_occluder(Vec3(0.0f,0.75f,-0.4f), 0.15f);
+  ball_occluder.diff_color = RGB(0.0f, 0.0f, 1.0f);
+  scene.add_primitive(ball_occluder);
+
   /* // SETUP II
   Shape ball_light(Vec3(0.0f, 1.0f, 0.0f), 0.2f);
   ball_light.emission = RGB(5.0f, 5.0f, 5.0f);
