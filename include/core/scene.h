@@ -25,7 +25,7 @@ public:
   bool cast_ray(const Ray& r, Isect& isect) const;
   bool cast_shadow_ray(const Ray& r, float t) const;
 
-  Scene() {}
+  Scene() : em_area(0.0f) {}
 };
 
 #endif

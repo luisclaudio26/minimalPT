@@ -261,14 +261,12 @@ RGB Integrator::pathtracer(const Scene& scene,
   // is always darker than it should
   const int max_length = 6;
 
-  /*
   RGB rad(0.0f);
   for(int i = 0; i <= max_length; ++i)
     rad += camera_path(scene, primary_ray, isect, i);
   return rad;
-  */
 
-  return camera_path(scene, primary_ray, isect, 3);
+  //return camera_path(scene, primary_ray, isect, 3);
 }
 
 RGB Integrator::normal_shading(const Scene& scene,

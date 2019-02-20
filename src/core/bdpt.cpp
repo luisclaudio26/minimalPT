@@ -234,6 +234,8 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // final weight according to balance heuristic
   weight = path_pdf / den;
 
+  //if( vertices[vertex_s].isect.shape->emission.r > 0.0f ) printf("%f %f %f %f | ", vertices[vertex_s].pdf_bwd, weight, path_pdf, den);
+
   // TODO: ALL OF SUDDEN WEIGHTS START TO BECOME NEGATIVE!!!
   //if( weight < 0 ) printf("!");
 
@@ -520,9 +522,9 @@ RGB Integrator::bd_path(const Scene& scene,
   return acc;
 
   /*
-  float path_pdf;
-  RGB acc = connect_paths(2, 3, vertices, scene, path_pdf);
-  return acc * (1.0f / path_pdf);
+  float path_pdf, weight;
+  RGB acc = connect_paths(3, 0, vertices, scene, path_pdf, weight);
+  return acc * (weight / path_pdf);
   */
 }
 
@@ -531,14 +533,13 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
-  /*
   RGB out(0.0f);
   for(int i = 2; i <= 7; ++i)
     out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
-  */
 
-  return bd_path(scene, primary_ray, lens_normal, isect, 4);
+
+  //return bd_path(scene, primary_ray, lens_normal, isect, 4);
 }
 
 // -----------------------------------------------------------------------------
