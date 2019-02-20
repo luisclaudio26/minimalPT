@@ -176,14 +176,8 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // ----------------------------------------------
   // <editor-fold> MIS weight
 
-  /*
-  if( vertices[vertex_s].isect.shape && vertices[vertex_s].isect.shape->emission.r > 0.0f )
-  {
-    printf("%f | ", path_pdf);
-  }
-  */
-
   // denominator of Balance heuristic
+  // TODO: Still lots of NaNs!!!
   float den = path_pdf;
 
   // expand path PDF in the FORWARD sense (towards the light source)

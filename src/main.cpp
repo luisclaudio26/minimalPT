@@ -16,6 +16,7 @@ int main(int argc, char** args)
   scene.cam.compute_parameters(Vec3(0.0f,0.5f,1.5f), Vec3(0.0f,1.0f,0.0f), Vec3(0.0f,0.5f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
   //scene.cam.compute_parameters(Vec3(0.0f,1.5f,-1.0f), Vec3(0.0f,0.0f,-1.0f), Vec3(0.0f,-1.0f,-1.0f), 35.0f, 4.0/3.0f, 35.0f);
 
+  // <editor-fold> Scene I
   float R = 1000.0f;
   Shape ball_floor(Vec3(0.0f,-R,0.0f), R);
   ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
@@ -37,12 +38,6 @@ int main(int argc, char** args)
   ball_back.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_back);
 
-  /*
-  Shape ball_front(Vec3(0.0f, 0.0f, (R+2.0f)), R);
-  ball_front.diff_color = RGB(1.0f, 1.0f, 1.0f);
-  scene.add_primitive(ball_front);
-  */
-
   Shape ball_1(Vec3(0.0f,0.1f,-0.2f), 0.1f);
   ball_1.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive(ball_1);
@@ -57,16 +52,21 @@ int main(int argc, char** args)
   scene.add_primitive(ball_3);
 
   float w = 10.0f;
-  Shape ball_light(Vec3(0.0f,0.9f,-0.4f), 0.05f);
+  Shape ball_light(Vec3(0.0f,0.7f,-0.4f), 0.1f);
   ball_light.emission = RGB(w, w, w);
   ball_light.diff_color = RGB(0.0f, 0.0f, 0.0f);
   scene.add_primitive(ball_light);
 
+  /*
   Shape ball_occluder(Vec3(0.0f,0.75f,-0.4f), 0.15f);
   ball_occluder.diff_color = RGB(0.0f, 0.0f, 1.0f);
   scene.add_primitive(ball_occluder);
+  */
 
-  /* // SETUP II
+  // </editor-fold>
+
+  // <editor-fold> Scene II
+  /*
   Shape ball_light(Vec3(0.0f, 1.0f, 0.0f), 0.2f);
   ball_light.emission = RGB(5.0f, 5.0f, 5.0f);
   scene.add_primitive( ball_light );
@@ -95,8 +95,10 @@ int main(int argc, char** args)
   ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
   scene.add_primitive( ball_floor );
   */
+  // </editor-fold>
 
-  /* //SETUP 1
+  // <editor-fold> Scene III
+  /*
   Shape ball_floor(Vec3(0.0f,-60.0f,0.0), 60.0f);
   ball_floor.diff_color = RGB(1.0f, 0.0f, 0.0f);
   scene.add_primitive( ball_floor );
@@ -132,7 +134,7 @@ int main(int argc, char** args)
   ball_glass.eta = 0.45f;
   scene.add_primitive(ball_glass);
   */
-
+  // </editor-fold>
 
   // -------------------------------------------------
   // configure integrator and film settings ----------
