@@ -2,6 +2,7 @@
 #include <nanogui/button.h>
 #include <nanogui/layout.h>
 #include <iostream>
+#include <chrono>
 
 GUI::GUI(const Scene& scene, Integrator& integrator)
   : scene(scene), integrator(integrator),
@@ -50,12 +51,21 @@ void GUI::drawContents()
 {
   // update frame by requesting more samples
   static int spp_count = 0;
+  static double total_time = 0.0f;
+
   if( spp_count < 4096 )
   {
+    using namespace std::chrono;
+
+    high_resolution_clock::time_point t_s = high_resolution_clock::now();
     integrator.render(this->scene);
-    //integrator.light_tracer(this->scene);
+    high_resolution_clock::time_point t_e = high_resolution_clock::now();
+
+    duration<double> time_span = duration_cast<duration<double>>(t_e - t_s);
+    total_time += time_span.count();
     spp_count++;
-    std::cout<<"\rComputed "<<spp_count<<" samples per pixel"<<std::flush;
+
+    std::cout<<"\rComputed "<<spp_count<<" spp. Avg. time per sample: "<<total_time/spp_count<<"s. Total time: "<<total_time<<"s"<<std::flush;
   }
 
   //---------- displaying ----------

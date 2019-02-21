@@ -528,14 +528,10 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
-  /*
   RGB out(0.0f);
   for(int i = 2; i <= 7; ++i)
     out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
-  */
-
-  return bd_path(scene, primary_ray, lens_normal, isect, 5);
 }
 
 // -----------------------------------------------------------------------------
