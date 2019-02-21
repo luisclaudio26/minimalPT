@@ -13,7 +13,8 @@ using namespace std::chrono;
 static RGB sample_light(const Ray& primary_ray,
                           const Isect& isect,
                           const Scene& scene,
-                          float& pdf_solidangle)
+                          float& pdf_area,
+                          float& pdf_brdf)
 {
   Vec3 p(primary_ray(isect.t) + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f));
   Vec3 d = -primary_ray.d;
@@ -28,7 +29,6 @@ static RGB sample_light(const Ray& primary_ray,
 
   // sample a point on the surface
   Vec3 q, n;       // sampled point q and normal at q
-  float pdf_area;  // probability of choosing q on the surface of l
   l.sample_surface(q, n, pdf_area);
 
   // compute radiance coming from q in direction w = q - p
@@ -67,39 +67,55 @@ static RGB sample_light(const Ray& primary_ray,
   // SOLID ANGLE to PDFs in SURFACE AREA. The calculation below is doing the
   // exact inverse of what it says: it is converting a PDF in solid angle to one
   // in surface area, as needed to our path PDF computation.
-  RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d, p) * L_qw;
-  pdf_solidangle = pdf_area * r2 / glm::dot(n, -w_n);
+  //RGB rad = v * glm::dot(w_n,isect.normal) * isect.shape->brdf(w_n, -d, p) * L_qw;
+  RGB rad = v * L_qw * isect.shape->brdf(w_n, -d, p)
+              *(glm::dot(n, -w_n) * glm::dot(isect.normal, w_n) / r2);
+
+  // PDF of picking q by sampling the BRDF is zero if the point is occluded!
+  pdf_brdf = v * isect.shape->pdf_brdf(d, w_n, p);
 
   return rad;
 }
 
-static RGB sample_brdf(const Ray& primary_ray,
-                        const Isect& isect,
+static RGB sample_brdf(const Ray& ray_in,
+                        const Isect& isect_cur,
                         const Scene& scene,
-                        float& pdf_solidangle)
+                        float& pdf_brdf,
+                        float& pdf_light)
 {
   RGB rad_out(0.0f);
 
   // intersection point
-  Vec3 p(primary_ray(isect.t) + isect.normal*(isect.shape->type == GLASS ? -0.0001f : 0.0001f));
+  Vec3 p(ray_in(isect_cur.t) + isect_cur.normal*(isect_cur.shape->type == GLASS ? -0.0001f : 0.0001f));
 
   // sample BRDF direction
-  Vec3 brdf_dir = isect.shape->sample_brdf(p, -primary_ray.d, pdf_solidangle);
+  Vec3 brdf_dir = isect_cur.shape->sample_brdf(p, -ray_in.d, pdf_brdf);
 
   // cast ray, check whether it hits a light source
-  Ray brdf_ray(p, brdf_dir); Isect isect_brdf;
-  if( scene.cast_ray(brdf_ray, isect_brdf) )
+  Ray brdf_ray(p, brdf_dir); Isect isect_next;
+  if( scene.cast_ray(brdf_ray, isect_next) )
   {
-    float cosNW = glm::dot(isect.normal, brdf_dir);
-    if(isect.shape->type == GLASS) cosNW *= -1.0f;
+    float cosNW = glm::dot(isect_cur.normal, brdf_dir);
+    if(isect_cur.shape->type == GLASS) cosNW *= -1.0f;
 
     //QUESTION: wouldn't it be necessary to consider the cosine term of the radiance going out?
-    rad_out = isect_brdf.shape->emission
-                * isect.shape->brdf(brdf_dir, -primary_ray.d, p)
+    // ANSWER: No, because lights are assumed to be isotropic and diffuse (radiance
+    // is the same in whatever point, whatever direction you choose)
+    rad_out = isect_next.shape->emission
+                * isect_cur.shape->brdf(brdf_dir, -ray_in.d, p)
                 * cosNW;
+
+    // TODO: compute sample probability as if it was sampled in light sources.
+    // The same way: if it's on a black surface, p = 0. if it's on a light source,
+    // p = 1/Area. The final weight is brdf / (brdf + light)
+    pdf_light = (isect_next.shape->emission == RGB(0.0f)) ?
+                  0.0f : 1.0f/scene.emissive_area();
   }
   else
+  {
     rad_out = RGB(0.0f); // TODO: environment contribution
+    pdf_light = 0.0f;
+  }
 
   return rad_out;
 }
@@ -138,7 +154,7 @@ RGB Integrator::camera_path(const Scene& scene,
   // the first "component" is the possible emission from p
   // TODO: this is included in the Direct Illumination computation!
   //path_rad += isect.shape->emission;
-  if(path_length == 1) return isect.shape->emission;
+  if(path_length == 2) return isect.shape->emission;
 
   // now we need to compute all the light arriving at p, from all directions; or,
   // speaking in terms of surface, we want to know the contribution of each point
@@ -150,17 +166,19 @@ RGB Integrator::camera_path(const Scene& scene,
 
   // TODO: pdf of primary_ray. For a pinhole camera, this is always 1 (because
   // for a single sample on the film, there's only one ray passing through the
-  // aperture).
+  // aperture). INCLUDE THE PDFS OF THE FIRST TWO VERTICES!!!
   float path_pdf = 1.0f;
   RGB throughput(1.0f);
-  Vec3 p = primary_ray(isect.t) + isect.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
-  Isect isect_p = isect;
-  Ray o_to_p = primary_ray;
+  Vec3 cur = primary_ray(isect.t) + isect.normal * (isect.shape->type == GLASS ? -0.0001f : 0.0001f);
+  Isect isect_cur = isect;
+  Ray last_to_cur = primary_ray;
 
-  // this loop importance samples the BRDF
+  // this loop progressively importance samples the BRDF. The last vertex is not
+  // computed, as we'll sample the BRDF and the light sources separately so we
+  // can combine them using MIS.
   // TODO: next event estimation, which will make this loop compute all the subpaths
   // up to path_length. only doing so we can russian roulette the path termination
-  for(int i = 0; i < path_length-2; ++i)
+  for(int i = 2; i < path_length-1; ++i)
   {
     // pick point by uniformly sampling hemisphere around p and tracing a ray
     // from p. Remember that we are computing a integral over the whole surface
@@ -176,16 +194,16 @@ RGB Integrator::camera_path(const Scene& scene,
     // The last bounce will simply add the direct illumination from the last
     // surface to the last but one and skip.
     float pdf_angle;
-    Vec3 w = isect_p.shape->sample_brdf(p, -o_to_p.d, pdf_angle);
+    Vec3 w = isect_cur.shape->sample_brdf(cur, -last_to_cur.d, pdf_angle);
 
     // If our ray doesn't hit any surface, we simply return a sample with
-    // with contribution zero.
+    // contribution zero.
     // TODO: escaping rays must receive the contribution of environment lighting
-    Ray p_to_q(p, w); Isect isect_q;
-    if( !scene.cast_ray(p_to_q, isect_q) ) return RGB(0.0f);
+    Ray cur_to_next(cur, w); Isect isect_next;
+    if( !scene.cast_ray(cur_to_next, isect_next) ) return RGB(0.0f);
 
     // update throughput with BRDF * cos and path PDF
-    // OLD: throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * glm::dot(w, isect_p.normal);
+    // OLD: throughput *= isect_cur.shape->brdf(w, -last_to_cur.d, p) * glm::dot(w, isect_cur.normal);
     //
     // QUESTION:
     // This hotfix kinda solves the problem of refraction, although (1) I'm not sure
@@ -203,53 +221,47 @@ RGB Integrator::camera_path(const Scene& scene,
     //    with 1 bounce only it should be possible to create the light source highlight,
     //    as with one bounce only we can reach the other side of the sphere and compute
     //    the direct illumination contribution.
-    //float cosNW = isect.shape->type == GLASS ? glm::dot(-isect_p.normal, w) : glm::dot(isect_p.normal, w);
-    float cosNW = glm::dot(isect_p.normal, w);
-    if( isect_p.shape->type == GLASS ) cosNW *= -1.0f;
+    //float cosNW = isect.shape->type == GLASS ? glm::dot(-isect_cur.normal, w) : glm::dot(isect_cur.normal, w);
+    float cosNW = glm::dot(isect_cur.normal, w);
+    if( isect_cur.shape->type == GLASS ) cosNW *= -1.0f;
 
-    throughput *= isect_p.shape->brdf(w, -o_to_p.d, p) * cosNW;
+    throughput *= isect_cur.shape->brdf(w, -last_to_cur.d, cur) * cosNW;
     path_pdf *= pdf_angle;
 
     // update variables to recursively compute next light bounce
-    //p = p_to_q(isect_q.t) + 0.0001f*isect_q.normal;
-    p = p_to_q(isect_q.t) + isect_q.normal * (isect_q.shape->type == GLASS ? -0.0001f : 0.0001f);
-    isect_p = isect_q;
-    o_to_p = p_to_q;
+    //p = cur_to_next(isect_next.t) + 0.0001f*isect_next.normal;
+    cur = cur_to_next(isect_next.t) + isect_next.normal * (isect_next.shape->type == GLASS ? -0.0001f : 0.0001f);
+    isect_cur = isect_next;
+    last_to_cur = cur_to_next;
   }
 
   // the last iteration importance samples direct lighting by combining
   // BRDF sampling and light sampling using multiple importance sampling.
   // sample BRDF
-  float brdf_pdf;
-  RGB di_brdf = sample_brdf(o_to_p, isect_p, scene, brdf_pdf);
+  float pdf_brdf_scattered, pdf_brdf_light;
+  RGB di_brdf = sample_brdf(last_to_cur, isect_cur, scene,
+                              pdf_brdf_scattered, pdf_brdf_light);
   RGB rad_brdf = di_brdf * throughput;
-  float pdf_brdf = path_pdf * brdf_pdf;
+  float pdf_brdf = path_pdf * pdf_brdf_scattered;
+  float w_brdf = pdf_brdf / (pdf_brdf + path_pdf*pdf_brdf_light);
 
   // if material has specular properties, it is in general useless to sample
   // the light sources, as this will return paths with pdf zero which will NaN
   // the output. if this is the case, simply return the BRDF sampling path.
-  if( isect_p.shape->type == GLASS || isect_p.shape->type == DELTA )
+  if( isect_cur.shape->type == GLASS || isect_cur.shape->type == DELTA )
     return rad_brdf * (1.0f / pdf_brdf);
 
   // sample light sources. reaching this point means that the material is
   // glossy/diffuse (non-delta)
-  float light_pdf;
-  RGB di_ls = sample_light(o_to_p, isect_p, scene, light_pdf);
+  float pdf_light_light, pdf_light_scattered;
+  RGB di_ls = sample_light(last_to_cur, isect_cur, scene,
+                            pdf_light_light, pdf_light_scattered);
   RGB rad_ls = di_ls * throughput;
-  float pdf_ls = path_pdf * light_pdf;
-
-  // Power heuristic for multiple importance sampling
-  // TODO: THIS IS NOT CORRECT! Check BDPT comments on multiple importance
-  // sampling the different strategies!
-  float over_sum_pdfs = 1.0f / (pdf_ls*pdf_ls + pdf_brdf*pdf_brdf);
-  float w_light = (pdf_ls*pdf_ls) * over_sum_pdfs;
-  float w_brdf = (pdf_brdf*pdf_brdf) * over_sum_pdfs;
+  float pdf_ls = path_pdf * pdf_light_light;
+  float w_ls = pdf_ls / (pdf_ls + path_pdf*pdf_light_scattered);
 
   // final contribution of this radiance path
-  return rad_ls*w_light/pdf_ls + rad_brdf*w_brdf/pdf_brdf;
-
-  //return rad_ls * (1.0f / pdf_ls);
-  //return rad_brdf * (1.0f / pdf_brdf);
+  return rad_brdf * (w_brdf/pdf_brdf) + rad_ls * (w_ls/pdf_ls);
 }
 
 RGB Integrator::pathtracer(const Scene& scene,
@@ -259,14 +271,14 @@ RGB Integrator::pathtracer(const Scene& scene,
   // TODO: russian rouletting. the it is done below is
   // underestimating the total radiance, thus the image
   // is always darker than it should
-  const int max_length = 6;
+  const int max_length = 7;
 
   RGB rad(0.0f);
-  for(int i = 0; i <= max_length; ++i)
+  for(int i = 2; i <= max_length; ++i)
     rad += camera_path(scene, primary_ray, isect, i);
   return rad;
 
-  //return camera_path(scene, primary_ray, isect, 3);
+  //return camera_path(scene, primary_ray, isect, 5);
 }
 
 RGB Integrator::normal_shading(const Scene& scene,
@@ -539,8 +551,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        //rad = pathtracer(scene, primary_ray, isect);
-        rad = bdpt(scene, primary_ray, lens_normal, isect);
+        rad = pathtracer(scene, primary_ray, isect);
+        //rad = bdpt(scene, primary_ray, lens_normal, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.

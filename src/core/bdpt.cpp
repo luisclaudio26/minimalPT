@@ -177,7 +177,10 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   // <editor-fold> MIS weight
 
   // denominator of Balance heuristic
-  // TODO: Still lots of NaNs!!!
+  // TODO: Still lots of NaNs!!
+  // TODO: MIS in regular pathtracing handles light source reflects BETTER. This
+  // is probably because we discard light sampling for specular materials. We
+  // should do something similar here
   float den = path_pdf;
 
   // expand path PDF in the FORWARD sense (towards the light source)
@@ -507,6 +510,8 @@ RGB Integrator::bd_path(const Scene& scene,
   // path using a given connection strategy.
   // </editor-fold>
 
+  // TODO: discard sampling strategies that are virtually "impossible" (like
+  // connecting light vertices to camera vertices originating in specular materials)
   RGB acc(0.0f);
   for(int c = 2; c <= path_length; ++c)
   {
@@ -514,13 +519,8 @@ RGB Integrator::bd_path(const Scene& scene,
     RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf, weight);
     acc += path_rad * (weight / path_pdf);
   }
-  return acc;
 
-  /*
-  float path_pdf, weight;
-  RGB acc = connect_paths(4, 0, vertices, scene, path_pdf, weight);
-  return acc * (weight / path_pdf);
-  */
+  return acc;
 }
 
 RGB Integrator::bdpt(const Scene& scene,
@@ -528,12 +528,14 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
+  /*
   RGB out(0.0f);
   for(int i = 2; i <= 7; ++i)
     out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
+  */
 
-  //return bd_path(scene, primary_ray, lens_normal, isect, 4);
+  return bd_path(scene, primary_ray, lens_normal, isect, 5);
 }
 
 // -----------------------------------------------------------------------------
