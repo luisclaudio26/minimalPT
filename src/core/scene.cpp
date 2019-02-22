@@ -1,5 +1,7 @@
-#include "../../include/core/scene.h"
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
+
+#include "../../include/core/scene.h"
 #include <cfloat>
 #include <cstdio>
 

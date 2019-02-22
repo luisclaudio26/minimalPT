@@ -323,6 +323,10 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.pos = cur_to_next(next_isect.t);
     next_v.pdf_fwd = dir_pdf * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
 
+    // REVIEW: hot fix for the d2 = 0 -> pdf = infinity problem. this effectively
+    // discards this path
+    if( !std::isfinite(next_v.pdf_fwd) ) next_v.pdf_fwd = 10000.0f;
+
     // backward probability: this is the PDF of the LAST vertex being chosen
     // by CURRENT, while the forward probability is the PDF of the NEXT vertex being
     // chosen by the CURRENT one - all in a "BRDF sampling" sense.
@@ -517,7 +521,11 @@ RGB Integrator::bd_path(const Scene& scene,
   {
     float path_pdf, weight;
     RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf, weight);
-    acc += path_rad * (weight / path_pdf);
+
+    RGB v = path_rad * (weight / path_pdf);
+
+    // REVIEW: Hotfix for negative values!
+    if( v.r > 0.0f && v.g > 0.0f && v.b > 0.0f ) acc += v;
   }
 
   return acc;
@@ -528,10 +536,14 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
+
   RGB out(0.0f);
   for(int i = 2; i <= 7; ++i)
     out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
+
+
+  //return bd_path(scene, primary_ray, lens_normal, isect, 4);
 }
 
 // -----------------------------------------------------------------------------
