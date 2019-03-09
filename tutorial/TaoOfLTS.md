@@ -86,16 +86,49 @@ _What you should learn and then forget_
   of a continuous surface gives us the total power arriving at this domain.
 
   Finally, recall the figure above. Considering a single point, it is natural then
-  to talk about the photons arriving in a single direction: this is what _irradiance_
+  to talk about the photons arriving in a single direction: this is what _radiance_
   means, and is by far the quantity we'll deal with the most. Summing the energy
   of all directions in a single point gives us the irradiance at that point; summing
   all the irradiances of a surface, gives us the total power arriving at it;
   summing the power at all time steps, gives us the total energy that arrived
   there. [mostrar quadrinho com a ordem das coisas]
 
-### The physics of taking a picture
+  The mathematics for these quantities is more or less intuitive: recall again
+  the figuve above. Let's say $L(\mathbf{p}, \omega)$ is the irradiance function
+  that measures the power arriving at a point $\mathbf{p}$ and direction $\omega$ -
+  in other words, it (indirectly) tells us how many photons per second arrives at
+  $\mathbf{p}$ from direction $\omega$. If we wish to know the total power arriving
+  $\mathbf{p}$, we need to consider _all_ the directions that power may arrive from
+  and sum all of them; as we are in a continuous setup, "summing" things is
+  actually integrating $L(\mathbf{p}, \omega)$ over all possible values of $\omega$ -
+  which is the set of all directions in the hemisphere above $\mathbf{p}$ - CG
+  people usually call it $\mathcal{H}^+$:
 
-blabla
+  \[ L(\mathbf{p}) = \int_{\mathcal{H}^+} L(\mathbf{p}, \omega) \; d\omega\]
+
+  Pun intended: we integrated (condensed) all the "angular information" of the
+  irradiance function in a given point - we cannot distinguish from where direction
+  did power came from, but we know that the total power arriving at $\mathbf{p}$
+  is $L(\mathbf{p})$ - the _irradiance_ function. We "overloaded" the function
+  $L$ because it still talks about power, but one version talks about power at
+  a given a point, the other about power at a given point and direction. Analogously,
+  if one integrates the irradiance $L(\mathbf{p})$ over all points $\mathbf{p}$ of
+  a surface, we get the total power arriving at the surface.
+
+  On the units: power is measured in Joules per sec (a.k.a. Watts); irradiance
+  if (not surprisingly) measured in W/m² (or any other area unit). Radiance is
+  measured in (W/m²)/sr = $\frac{W}{m² \cdot sr}$ (steradian, which is a measure of solid angle). Think of
+  solid angle being to regular, planar angles what area is to length; thus,
+  steradians are to radians what m² is to meter. Check the wikipedia article for
+  a more precise definition, but you'll see it's a way of talking about (continuous)
+  sets of directions over the hemisphere of directions - perfect, then, to talk
+  about radiance.
+
+### The physics of taking a digital picture
+
+A digital camera is a _sensor_ with lots of fancy stuff like lenses and diaphragms
+around it. This sensor is essentially a device with many tiny cells - we call it
+_sensor pixels_ - that somehow "count" how many photons arrive at it.
 
 ### Computing radiance: the Light Transport Equation
 
@@ -106,5 +139,14 @@ blabla
 blabla
 
 ### Forgetting things (the right way)
+
+As I told you in the beginning, this text is rather repetitive for a good reason:
+in order to properly grasp the concepts taken from radiometry, one needs to reason
+about the same thing multiple times, from different perspectives. To actually
+understand things, I needed to read the same definition over and over, think of
+it as departing from the definition of radiance, then do the same way departing
+from the concept of energy, each time parsing the words "irradiance" as "power
+per area per solid angle", then parsing "power" as "energy per second", then
+thinking of "energy" as counting photons and so on.
 
 blabla Taoism
