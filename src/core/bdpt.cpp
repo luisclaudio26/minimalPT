@@ -525,7 +525,7 @@ RGB Integrator::bd_path(const Scene& scene,
     RGB v = path_rad * (weight / path_pdf);
 
     // REVIEW: Hotfix for negative values!
-    if( v.r > 0.0f && v.g > 0.0f && v.b > 0.0f ) acc += v;
+    if( v.r >= 0.0f && v.g >= 0.0f && v.b >= 0.0f ) acc += v;
   }
 
   return acc;
@@ -536,14 +536,12 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
-
   RGB out(0.0f);
   for(int i = 2; i <= 7; ++i)
     out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
 
-
-  //return bd_path(scene, primary_ray, lens_normal, isect, 4);
+  //return bd_path(scene, primary_ray, lens_normal, isect, 3);
 }
 
 // -----------------------------------------------------------------------------
