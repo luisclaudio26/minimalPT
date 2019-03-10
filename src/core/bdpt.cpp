@@ -516,19 +516,38 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // TODO: discard sampling strategies that are virtually "impossible" (like
   // connecting light vertices to camera vertices originating in specular materials)
-  RGB acc(0.0f);
-  for(int c = 2; c <= path_length; ++c)
+  RGB out(0.0f);
+
+  /*
+  for(int l = 2; l <= path_length; ++l)
+  {
+    RGB acc(0.0f);
+    for(int c = 2; c <= l; ++c)
+    {
+      float path_pdf, weight;
+      RGB path_rad = connect_paths(c, l - c, vertices, scene, path_pdf, weight);
+      RGB v = path_rad * (weight / path_pdf);
+
+      // REVIEW: Hotfix for negative values!
+      if( v.r >= 0.0f && v.g >= 0.0f && v.b >= 0.0f )
+        acc += v;
+    }
+
+    out += acc;
+  }*/
+
+  int len = 4;
+  for(int c = 2; c <= len; ++c)
   {
     float path_pdf, weight;
-    RGB path_rad = connect_paths(c, path_length - c, vertices, scene, path_pdf, weight);
-
+    RGB path_rad = connect_paths(c, len - c, vertices, scene, path_pdf, weight);
     RGB v = path_rad * (weight / path_pdf);
 
     // REVIEW: Hotfix for negative values!
-    if( v.r >= 0.0f && v.g >= 0.0f && v.b >= 0.0f ) acc += v;
+    if( v.r >= 0.0f && v.g >= 0.0f && v.b >= 0.0f ) out += v;
   }
 
-  return acc;
+  return out;
 }
 
 RGB Integrator::bdpt(const Scene& scene,
@@ -536,12 +555,17 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
+  /*
   RGB out(0.0f);
   for(int i = 2; i <= 7; ++i)
     out += bd_path(scene, primary_ray, lens_normal, isect, i);
   return out;
+  */
 
-  //return bd_path(scene, primary_ray, lens_normal, isect, 3);
+  // BUG: if we send more vertices than we need, there's some problem with the
+  // WEIGHTS. Each rad/pdf component is ok individually, but the weights are
+  // weird. Probably because of the loop that computes the weights!
+  return bd_path(scene, primary_ray, lens_normal, isect, 6);
 }
 
 // -----------------------------------------------------------------------------
