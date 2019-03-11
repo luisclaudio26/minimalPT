@@ -1,0 +1,8 @@
+TODO:
+
+1. "Next event estimation" -> reutilizar vértices para caminhos de vários tamanhos
+2. Ajeitar MIS (desconsiderar casos como a da reflexão especular total)
+3. Threadpool para paralelização
+4. Carregar malhas de triângulo com código do .OBJ
+5. Suporte a textura
+6. Microfaceted materials -> Oren-Nayar, Cook-Torrance.
