@@ -5,6 +5,29 @@ _What you should learn and then forget_
 
 ### First words ###
 
+---
+
+While working my "tutorial" on how I built my bidirectional pathtracing, I noticed
+that first of all I wanted to write the "Light Transport Theory 101" I ever wanted
+to read when I started. Here there are no real implementation stuff, but rather
+the best description I could give to the single problem that every renderer must
+solve, no matter whether they use classical pathtracing, bdpt, MLT, even less if
+they are implemented in single-threaded CPU or using OptiX to run on fancy RTX cards.
+I see that people on twitter, because they're more experienced, are always talking
+about implementation details and how to speed up things using one technique or another;
+as a beginner myself, I think that first we need to grasp the concepts, the big picture;
+after building a solid foundation, navigating among different LTS algorithms and
+their implementations is a matter of searching for the concepts you already know
+in the lines of the code you're working with.
+
+This text is one of the references I wish I had when I started: small, not worried
+about particular algorithms or implementation, and something that allowed me to
+actually _build_ the classical algorithms myself, instead of simply copy-pasting
+them from another place. Above all, I wanted a good introduction before going to
+Physically-based Rendering or Veach's thesis.
+
+---
+
   This is the first part of a series where I'll be sharing with you my work, problems,
   and solutions towards while implementing a basic bidirectional pathtracing.
   I started with a blank screen and ended up with a "low fat" rendering system with
