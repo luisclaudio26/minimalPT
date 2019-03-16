@@ -330,7 +330,118 @@ note as soon as I find something on this.
 
 ### Computing radiance: the Light Transport Equation
 
-blabla
+At this point, we understand the mathematical/computational tool of Monte Carlo
+integral and how to use it to compute the final energy measured in a sensor.
+There's only one thing missing here: how to compute the radiance $L(s, \omega)$,
+which is the starting point for the stack of integrals leading to energy.
+
+The Light Transport Equation tells us how to do this:
+
+\[ L(p_0 \leftarrow p_1) = L_e(p_0 \leftarrow p_1) + \int_{S} L(p_1 \leftarrow p) f(p_0 \leftarrow p_1 \leftarrow p) G(p_1 \leftrightarrow p) \; dp \]
+
+Where:
+
+$L(x \leftarrow y)$ is the radiance arriving at point $x$ from $y$
+
+$L_e(x \leftarrow y)$ is the radiance _emitted_ from $y$ and arriving at $x$. Things that are
+not light sources have their $L_e$ always zero
+
+The domain $S$ is the set of all points $p$ on surfaces on the scene
+
+$f(x \leftarrow y \leftarrow z)$ is the bidirectional radiance distribution function
+on the point $y$. It tells us how much of the light arriving from direction
+$y-z$ is transported to direction $y-x$.
+
+$G(x \leftrightarrow y)$ is a geometric coupling term that
+
+All of these terms are wavelength dependent (except for $G(x \leftrightarrow y)$),
+thus $L(x \leftarrow y)$ will be a vector with Red, Green and Blue components
+(the same for BRDF). The products, then, are all pointwise vector multiplications
+(a.k.a. Hadamard products). The geometric coupling term is a simple scalar.
+
+---
+$L(x \leftarrow y)$ and $L(x, \omega)$ are essentially the same thing: take the
+direction $\omega$ and get the point which is closest to $x$ in this direction;
+then, $L(x, \omega) = L(x \leftarrow y)$. A noteworthy difference, however, is that
+$L(x \leftarrow y)$ is zero if $x$ and $y$ do not see each other. [DESENHAR FIGURA]
+
+---
+
+Armed with Monte Carlo integrals, we shall not fear yet another weird integral in
+our path. However, this is one even more odd: it is recursive. In order to evaluate
+$L$, we need to compute an integral that depends on $L$ (but with different arguments).
+In his 1986 paper, Jim Kajiya noticed that if we keep replugging the definition
+inside the integral [^6], we end up with something like this:
+
+\[ L(p_0 \leftarrow p_1) = L_e(p_0 \leftarrow p_1) + \sum_{i = 3}^{\inf} T(p_0 \leftarrow p_1, i) \]
+
+Where $T(x \leftarrow y, k)$ is:
+
+\[ \int_S \int_S ... \int_S L_e(p_{k-2} \leftarrow p_{k-1}) \prod_{i = 2}^{k-1} f(p_{i-2} \leftarrow p_{i-1} \leftarrow p_i) G(p_{i-1} \leftrightarrow p_i) \; dp_2 \, dp_3 ... \, dp_{k-2} \, dp_{k-1}\]
+
+The last vertex is $p_{k-1}$ because $p_0$ is the first and we have $k$ points.
+$T(x \leftarrow y, k)$ is, intuitively, the contribution of all _light paths_
+of length $k$ where the last two vertices are $x$ and $y$. A light path is simply
+a finite sequence of points on the surfaces of the scene.
+
+---
+Handling indices in the above productory is a pain in the ass and each
+reference will treat the indices in a particular way. The important thing to
+remember is that for a path of length $n$, you need to multiply the $f(...)G(...)$
+terms $n-2$ times.
+
+---
+
+This complicated expression encodes a simple idea: the radiance going from $p_1$
+to $p_0$ is the sum of the radiances carried by _all_ light paths formed by 2,
+3, 4, ... points (vertices), where the last the vertices are $p_0$ and $p_1$.
+
+The $T(x \leftarrow y, k)$ term encodes the sum of all light paths with $k$ vertices.
+A single light path of length $k$ carries a radiance which depends on the BRDFs
+and geometric coupling terms, which attenuates the contribution of the last,
+possibly emitting vertex $p_{k-2}$.
+
+The Monte Carlo estimator for this is exactly the samething as defined above: we
+sample all $k-2$ points on the surfaces, and the PDF $p(p_2, p_3, ..., p_{k-2})$
+of sampling this tuple depends on the sampling method (if we just picked everyone
+independently, it would be the product of $p(p_2)p(p_3)...p(p_{k-2})$, for example).
+
+Summing everything, we end up with an algorithm for computing the total power
+arriving at a given pixel: sample a point on the pixel $p_0$, sample a point $p_1$
+on the lens; now, for $k = 1, 2, 3, ..., N$, randomly pick $N$ points on surfaces
+on the scene, compute the value as in eq. __, divide by $p(p_0)p(p_1)...p(p_{k-2})$
+and accumulate. Do this M times and finally divide by $M$: this is the final estimate
+for the power arriving at the pixel (the whole image is computed by doing this over
+all pixels on the sensor).
+
+If we were to implement the algorithm above we would probably end up with a deceptive
+black screen with a few random dots, far from a beautiful Cornell box scene. Even
+though we could think that we did something wrong, actually everything is right,
+but variance is so high that our final image is useless.
+
+How to diminish variance is the question that leads all the offline rendering
+research since Kajiya's article (and before RTX), I think. Variance reduction
+may be achieved at many points on this problem. For example, the well known pathtracing
+algorithm where one incrementally build a path of length $N$ by casting rays at
+each intersection and then choosing a point on a light source is an example. Changing
+the sampling methods - using stratified sampling instead of uniform sampling, for example -,
+is another. The thing evolved in a way that the idea is always to discover how
+to sample "good paths" while trying to avoid "bad ones" (those carrying zero radiance):
+Metropolis Light Transport, for example, is a way of sampling paths such that
+once we find a path, we try to sample other paths that are "similar" to it somehow.
+
+
+[^6]: This is a _Neumann series_ solution to the particular recursive equation
+$x = a + Mx$, where $M$ is a linear operator with eigenvalues all less than one.
+(in our case, the operator maps a function $L(x \leftarrow y)$ to the function
+$\int_S L(y \leftarrow z)f(x \leftarrow y \leftarrow z)G(y \leftarrow z) \; dz$,
+which is a linear mapping (mapping a sum of scaled functions is equivalent to summing
+the scaled mapped functions). This iterative product of matrices can be rewritten by
+employing an eigenvector decomposition $M^{k} = V.E^k.V^{T}$, where $E$ is the
+diagonal matrix of eigenvalues. It is not hard to see, them, that $M^{k}$ will
+only converge if $E^{k}$, and it converges when all eigenvalues have absolute value
+less than one (geometric progression). The energy conservation property of the
+BRDFs guarantees the spectral radius of $M$ to be within 1.
 
 ### Forgetting things (the right way)
 
