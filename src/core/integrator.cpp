@@ -271,16 +271,13 @@ RGB Integrator::pathtracer(const Scene& scene,
   // TODO: russian rouletting. the it is done below is
   // underestimating the total radiance, thus the image
   // is always darker than it should
-  const int max_length = 5;
-
-  /*
+  const int max_length = 7;
   RGB rad(0.0f);
   for(int i = 2; i <= max_length; ++i)
     rad += camera_path(scene, primary_ray, isect, i);
   return rad;
-  */
 
-  return camera_path(scene, primary_ray, isect, 5);
+  //return camera_path(scene, primary_ray, isect, 5);
 }
 
 RGB Integrator::normal_shading(const Scene& scene,

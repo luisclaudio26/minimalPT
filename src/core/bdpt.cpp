@@ -12,6 +12,7 @@ typedef struct
   Ray last;        // the ray used to find this vertex
   float pdf_fwd;   // PDF (surface area) of being selected by the last vertex
   float pdf_bwd;   // PDF (surface area) of being selected by the next vertex
+  float pdf_emi;   // PDF (surface area) of being selected as light source sample
   bool valid;      // is this vertex valid or not?
 } Vertex;
 
@@ -191,7 +192,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   float pdf_strat_fwd = path_pdf;
 
   // PROBLEM 1. If we use no light vertices, we have no connection PDF and this
-  // should be executed.
+  // first step on PDF expansion should be executed
   if( n_light_vertices > 0 )
   {
     pdf_strat_fwd *= (conn_pdf_fwd / vertices[vertex_t].pdf_fwd);
@@ -219,7 +220,12 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   {
     if( n_light_vertices == 0 )
     {
-      pdf_strat_bwd *= (vertices[vertex_s].pdf_bwd / vertices[vertex_s].pdf_fwd);
+      // PROBLEM 5: if we have more vertices in the vertex cache than needed
+      // (for example, we have a 4 vertex cache to build paths of length 3),
+      // the backward PDF os the last cam vertex as pointed by vertex_s will not
+      // be a PDF in terms of emissive area, but rather something like p(x | y)!
+      //pdf_strat_bwd *= (vertices[vertex_s].pdf_bwd / vertices[vertex_s].pdf_fwd);
+      pdf_strat_bwd *= (vertices[vertex_s].pdf_emi / vertices[vertex_s].pdf_fwd);
     }
     else
     {
@@ -265,6 +271,7 @@ RGB Integrator::bd_path(const Scene& scene,
     v.valid = false;
     v.pdf_fwd = 1.0f;
     v.pdf_bwd = -1.0f;
+    v.pdf_emi = -1.0f;
   }
 
   // ---------------------------------------------------
@@ -277,6 +284,7 @@ RGB Integrator::bd_path(const Scene& scene,
   lens_v.isect.normal = lens_normal;
   lens_v.pdf_fwd = 1.0f; // TODO: place actual lens sample PDF!
   lens_v.pdf_bwd = -1.0f; // TODO: BRDF sample from first_v
+  lens_v.pdf_emi = 0.0f;
 
   // we start by filling the second vertex cell (as the first EDGE is fixed due
   // to lens delta specular behavior).
@@ -296,6 +304,7 @@ RGB Integrator::bd_path(const Scene& scene,
   first_v.pdf_fwd = 1.0f; // the lens sample completely defines where the second
                           // vertex we fall i.e. p(x2) = p(x2 | x1) = 1.0 (??)
   first_v.pdf_bwd = -1.0f; //TODO: BRDF sample from vertices[2]
+  first_v.pdf_emi = -1.0f; // Technically wrong, but we will never use this
 
   // keep sampling BRDF and building camera subpath
   int cp_idx = 1;
@@ -322,6 +331,7 @@ RGB Integrator::bd_path(const Scene& scene,
     next_v.isect = next_isect;
     next_v.pos = cur_to_next(next_isect.t);
     next_v.pdf_fwd = dir_pdf * glm::dot(next_isect.normal, -out_dir) / next_isect.d2;
+    next_v.pdf_emi = next_v.isect.shape->emission == RGB(0.0f) ? 0.0f : 1.0f/scene.emissive_area();
 
     // REVIEW: hot fix for the d2 = 0 -> pdf = infinity problem. this effectively
     // discards this path
@@ -341,12 +351,28 @@ RGB Integrator::bd_path(const Scene& scene,
   // last two vertices on the camera path:
   // P( last vertex ) = 1.0f / TotalEmissiveArea, if it is a light source; 0 otherwise
   Vertex &last_cam = vertices[path_length-1];
-  Vertex &last_but_one = vertices[path_length-2];
+  last_cam.pdf_emi = (!last_cam.isect.shape || last_cam.isect.shape->emission == RGB(0.0f))
+                        ? 0.0f : 1.0f/scene.emissive_area();
+  last_cam.pdf_bwd = last_cam.pdf_emi; // just to maintain compatibility with existing code
 
+
+  Vertex &last_but_one = vertices[path_length-2];
+  last_but_one.pdf_emi = (!last_but_one.isect.shape || last_but_one.isect.shape->emission == RGB(0.0f)) ? 0.0f : 1.0f/scene.emissive_area();
+  const float pdf_uniform_hemisphere = _over2pi;
+  last_but_one.pdf_bwd = pdf_uniform_hemisphere * glm::dot(last_but_one.isect.normal, last_cam.last.d) / last_cam.isect.d2;
+
+
+  /* --- ORIGINAL ---
   if( !last_cam.isect.shape || last_cam.isect.shape->emission == RGB(0.0f) )
+  {
+    // TODO: check if we need indeed to set last_but_one to zero we could
+    // just compute the PDF assuming last_cam is on a light source
     last_cam.pdf_bwd = last_but_one.pdf_bwd = 0.0f;
+  }
   else
   {
+    // TODO: this is correct as long as we importance sample the light sources
+    // by area (which should not be difficult to do)
     last_cam.pdf_bwd = 1.0f / scene.emissive_area();
 
     // TODO this assumes all lights are diffuse and sampled using uniform
@@ -354,6 +380,7 @@ RGB Integrator::bd_path(const Scene& scene,
     const float pdf_uniform_hemisphere = _over2pi;
     last_but_one.pdf_bwd = pdf_uniform_hemisphere * glm::dot(last_but_one.isect.normal, last_cam.last.d) / last_cam.isect.d2;
   }
+  */
 
   // </editor-fold>
 
@@ -517,8 +544,6 @@ RGB Integrator::bd_path(const Scene& scene,
   // TODO: discard sampling strategies that are virtually "impossible" (like
   // connecting light vertices to camera vertices originating in specular materials)
   RGB out(0.0f);
-
-  /*
   for(int l = 2; l <= path_length; ++l)
   {
     RGB acc(0.0f);
@@ -529,22 +554,10 @@ RGB Integrator::bd_path(const Scene& scene,
       RGB v = path_rad * (weight / path_pdf);
 
       // REVIEW: Hotfix for negative values!
-      if( v.r >= 0.0f && v.g >= 0.0f && v.b >= 0.0f )
-        acc += v;
+      if( v.r >= 0.0f && v.g >= 0.0f && v.b >= 0.0f ) acc += v;
     }
 
     out += acc;
-  }*/
-
-  int len = 4;
-  for(int c = 2; c <= len; ++c)
-  {
-    float path_pdf, weight;
-    RGB path_rad = connect_paths(c, len - c, vertices, scene, path_pdf, weight);
-    RGB v = path_rad * (weight / path_pdf);
-
-    // REVIEW: Hotfix for negative values!
-    if( v.r >= 0.0f && v.g >= 0.0f && v.b >= 0.0f ) out += v;
   }
 
   return out;
@@ -555,17 +568,7 @@ RGB Integrator::bdpt(const Scene& scene,
                       const Vec3& lens_normal,
                       const Isect& isect)
 {
-  /*
-  RGB out(0.0f);
-  for(int i = 2; i <= 7; ++i)
-    out += bd_path(scene, primary_ray, lens_normal, isect, i);
-  return out;
-  */
-
-  // BUG: if we send more vertices than we need, there's some problem with the
-  // WEIGHTS. Each rad/pdf component is ok individually, but the weights are
-  // weird. Probably because of the loop that computes the weights!
-  return bd_path(scene, primary_ray, lens_normal, isect, 6);
+  return bd_path(scene, primary_ray, lens_normal, isect, 7);
 }
 
 // -----------------------------------------------------------------------------
