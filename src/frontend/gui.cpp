@@ -6,7 +6,9 @@
 #include <cstdlib>
 
 GUI::GUI(const Scene& scene, Integrator& integrator, int n_threads)
-  : scene(scene), integrator(integrator), tp(n_threads, integrator, scene),
+  : scene(scene),
+    integrator(integrator),
+    tp(n_threads, integrator, scene),
     nanogui::Screen(Eigen::Vector2i(100, 100), "Andaluz renderer", false)
 {
   using namespace nanogui;
@@ -49,7 +51,7 @@ GUI::GUI(const Scene& scene, Integrator& integrator, int n_threads)
 
   // --------- set threadpool ------------
   initialize_job_list();
-  tp.resume();
+  tp.spawn();
 };
 
 void GUI::initialize_job_list()
@@ -74,27 +76,6 @@ void GUI::initialize_job_list()
 
 void GUI::drawContents()
 {
-  /*
-  // update frame by requesting more samples
-  static int spp_count = 0;
-  static double total_time = 0.0f;
-
-  if( spp_count < 4096 )
-  {
-    using namespace std::chrono;
-
-    high_resolution_clock::time_point t_s = high_resolution_clock::now();
-    integrator.render(this->scene);
-    high_resolution_clock::time_point t_e = high_resolution_clock::now();
-
-    duration<double> time_span = duration_cast<duration<double>>(t_e - t_s);
-    total_time += time_span.count();
-    spp_count++;
-
-    std::cout<<"\rComputed "<<spp_count<<" spp. Avg. time per sample: "<<total_time/spp_count<<"s. Total time: "<<total_time<<"s"<<std::flush;
-  }
-  */
-
   // keep updating buffer
   shader.bind();
 
@@ -109,8 +90,6 @@ void GUI::drawContents()
     tp.hold();
     integrator.reconstruct_image();
 
-    printf("Updating...");
-
     // copy CPU color_buffer to GPU
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
@@ -121,15 +100,14 @@ void GUI::drawContents()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // resume
-    printf("done\n");
     frame_counter = 0;
     tp.resume();
   }
 
   // draw stuff
-  //glActiveTexture(GL_TEXTURE0);
-  //glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
-  //shader.setUniform("color_buffer", 0);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
+  shader.setUniform("color_buffer", 0);
   shader.drawArray(GL_TRIANGLES, 0, 6);
 }
 

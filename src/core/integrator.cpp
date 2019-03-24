@@ -607,8 +607,9 @@ void Integrator::render_patch(const Scene& scene, int I, int J, int w, int h)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        rad = pathtracer(scene, primary_ray, isect);
-        //rad = bdpt(scene, primary_ray, lens_normal, isect);
+        //rad = pathtracer(scene, primary_ray, isect);
+        rad = bdpt(scene, primary_ray, lens_normal, isect);
+        //rad = normal_shading(scene, primary_ray, isect);
 
       irradiance_sample = rad;
 
@@ -623,11 +624,7 @@ void Integrator::reconstruct_image()
 {
   for(int i = 0; i < vRes*hRes; ++i)
   {
-    //RGB avg_irradiance = samples[i]/weights[i];
-    //frame[i] = camera_response_curve(avg_irradiance);
-    frame[i].r = 0.2f;
-    frame[i].g = 0.2f;
-    frame[i].b = 0.8f;
-    frame[i].a = 1.0f;
+    RGB avg_irradiance = samples[i]/weights[i];
+    frame[i] = camera_response_curve(avg_irradiance);
   }
 }
