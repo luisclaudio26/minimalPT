@@ -3,9 +3,10 @@
 #include <nanogui/layout.h>
 #include <iostream>
 #include <chrono>
+#include <cstdlib>
 
-GUI::GUI(const Scene& scene, Integrator& integrator)
-  : scene(scene), integrator(integrator),
+GUI::GUI(const Scene& scene, Integrator& integrator, int n_threads)
+  : scene(scene), integrator(integrator), tp(n_threads, integrator, scene),
     nanogui::Screen(Eigen::Vector2i(100, 100), "Andaluz renderer", false)
 {
   using namespace nanogui;
@@ -45,10 +46,35 @@ GUI::GUI(const Scene& scene, Integrator& integrator)
   glGenTextures(1, &color_buffer_gpu);
   glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
   glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, this->width(), this->height());
+
+  // --------- set threadpool ------------
+  initialize_job_list();
+  tp.resume();
 };
+
+void GUI::initialize_job_list()
+{
+  const int patch_sz = 64;
+
+  for(int j = 0; j < this->height(); j += patch_sz)
+    for(int i = 0; i < this->width(); i += patch_sz)
+    {
+      Threadpool::Job job;
+      job.spp = 0;
+      job.i = i; job.j = j;
+
+      int remaining_w = this->width() - i;
+      job.w = remaining_w >= patch_sz ? patch_sz : remaining_w;
+      int remaining_h = this->height() - j;
+      job.h = remaining_h >= patch_sz ? patch_sz : remaining_h;
+
+      tp.jobs.push(job);
+    }
+}
 
 void GUI::drawContents()
 {
+  /*
   // update frame by requesting more samples
   static int spp_count = 0;
   static double total_time = 0.0f;
@@ -67,20 +93,43 @@ void GUI::drawContents()
 
     std::cout<<"\rComputed "<<spp_count<<" spp. Avg. time per sample: "<<total_time/spp_count<<"s. Total time: "<<total_time<<"s"<<std::flush;
   }
+  */
 
-  //---------- displaying ----------
+  // keep updating buffer
   shader.bind();
 
-  // copy CPU color_buffer to GPU
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, this->width(), this->height(),
-  	               GL_RGBA, GL_FLOAT, (void*)integrator.frame.data());
+  // update buffers after N frames
+  // TODO: why is the framerate so low??
+  const int refresh_period = 60;
+  static int frame_counter = 0;
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  frame_counter++;
+  if( frame_counter >= refresh_period )
+  {
+    tp.hold();
+    integrator.reconstruct_image();
 
-  shader.setUniform("color_buffer", 0);
+    printf("Updating...");
+
+    // copy CPU color_buffer to GPU
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, this->width(), this->height(),
+                     GL_RGBA, GL_FLOAT, (void*)integrator.frame.data());
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    // resume
+    printf("done\n");
+    frame_counter = 0;
+    tp.resume();
+  }
+
+  // draw stuff
+  //glActiveTexture(GL_TEXTURE0);
+  //glBindTexture(GL_TEXTURE_2D, color_buffer_gpu);
+  //shader.setUniform("color_buffer", 0);
   shader.drawArray(GL_TRIANGLES, 0, 6);
 }
 

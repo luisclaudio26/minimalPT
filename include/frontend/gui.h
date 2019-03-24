@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../core/integrator.h"
+#include "../core/threadpool.h"
 #include "../core/spectrum.h"
 
 class GUI : public nanogui::Screen
@@ -16,10 +17,13 @@ private:
   nanogui::GLShader shader;
   GLuint color_buffer_gpu;
 
+  Threadpool tp;
+  void initialize_job_list();
+
   Integrator& integrator;
   const Scene& scene;
 public:
-  GUI(const Scene& scene, Integrator& integrator);
+  GUI(const Scene& scene, Integrator& integrator, int n_threads);
   virtual void drawContents();
   virtual void draw(NVGcontext *ctx);
 };

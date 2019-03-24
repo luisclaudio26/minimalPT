@@ -1,5 +1,4 @@
 #include "../include/frontend/gui.h"
-#include "../include/core/threadpool.h"
 
 int main(int argc, char** args)
 {
@@ -181,10 +180,9 @@ int main(int argc, char** args)
   Integrator integrator;
 
   // invoke renderer
-  /*
   nanogui::init();
 
-  GUI myGUI(scene, integrator);
+  GUI myGUI(scene, integrator, 8);
   myGUI.drawAll();
   myGUI.setVisible(true);
 
@@ -193,9 +191,9 @@ int main(int argc, char** args)
   nanogui::mainloop();
 
   nanogui::shutdown();
-  */
 
-  Threadpool tp(2);
+  /*
+  Threadpool tp(8);
   tp.resume();
 
   for(int i = 0; i < 9; ++i)
@@ -212,6 +210,7 @@ int main(int argc, char** args)
   }
 
   for(auto t = tp.workers.begin(); t != tp.workers.end(); ++t) t->join();
+  */
 
   return 0;
 }

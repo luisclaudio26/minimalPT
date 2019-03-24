@@ -71,7 +71,8 @@ public:
   ColorBuffer frame;
 
   void render(const Scene& scene);
-  void light_tracer(const Scene& scene);
+  void render_patch(const Scene& scene, int I, int J, int w, int h);
+  void reconstruct_image();
 };
 
 #endif

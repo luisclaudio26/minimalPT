@@ -586,3 +586,48 @@ void Integrator::render(const Scene& scene)
     frame[i] = camera_response_curve(avg_irradiance);
   }
 }
+
+void Integrator::render_patch(const Scene& scene, int I, int J, int w, int h)
+{
+  for(int j = J; j < J+h; ++j)
+    for(int i = I; i < I+w; ++i)
+    {
+      RGB irradiance_sample(0.0f, 0.0f, 0.0f);
+
+      // uniformly sample pixel (i,j) and map sample coordinates
+      // to [0,1]² with j-axis flipping (film coordinate system)
+      float e1 = (float)rand()/RAND_MAX, e2 = (float)rand()/RAND_MAX;
+      Vec2 uv( (i+e1)/hRes, ((vRes-1)-j+e2)/vRes );
+
+      // get primary ray and first intersection,
+      // then invoke shader to compute the sample value
+      //Ray primary_ray = scene.cam.get_primary_ray(uv);
+      Vec3 lens_normal;
+      Ray primary_ray = scene.cam.get_primary_ray(uv, lens_normal);
+
+      Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
+      if( scene.cast_ray(primary_ray, isect) )
+        rad = pathtracer(scene, primary_ray, isect);
+        //rad = bdpt(scene, primary_ray, lens_normal, isect);
+
+      irradiance_sample = rad;
+
+      // sample splatting
+      int sample_add = j*hRes+i;
+      samples[sample_add] += irradiance_sample;
+      weights[sample_add] += 1.0f;
+    }
+}
+
+void Integrator::reconstruct_image()
+{
+  for(int i = 0; i < vRes*hRes; ++i)
+  {
+    //RGB avg_irradiance = samples[i]/weights[i];
+    //frame[i] = camera_response_curve(avg_irradiance);
+    frame[i].r = 0.2f;
+    frame[i].g = 0.2f;
+    frame[i].b = 0.8f;
+    frame[i].a = 1.0f;
+  }
+}
