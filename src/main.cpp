@@ -1,4 +1,5 @@
 #include "../include/frontend/gui.h"
+#include "../include/core/threadpool.h"
 
 int main(int argc, char** args)
 {
@@ -176,9 +177,11 @@ int main(int argc, char** args)
 
   // -------------------------------------------------
   // configure integrator and film settings ----------
+  // -------------------------------------------------
   Integrator integrator;
 
-  // invoke renderer ----------
+  // invoke renderer
+  /*
   nanogui::init();
 
   GUI myGUI(scene, integrator);
@@ -190,6 +193,25 @@ int main(int argc, char** args)
   nanogui::mainloop();
 
   nanogui::shutdown();
+  */
+
+  Threadpool tp(2);
+  tp.resume();
+
+  for(int i = 0; i < 9; ++i)
+  {
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    tp.hold();
+
+    std::cout<<"MAIN THREAD DOING SOMETHING\n";
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::cout<<"ok good to go\n";
+
+    tp.resume();
+  }
+
+  for(auto t = tp.workers.begin(); t != tp.workers.end(); ++t) t->join();
 
   return 0;
 }
