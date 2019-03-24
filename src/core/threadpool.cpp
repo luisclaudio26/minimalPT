@@ -71,9 +71,10 @@ void Threadpool::thread_callback()
     // otherwise, pick a new job.
     job.spp++;
     jobs_mtx.lock();
-      if(job.spp < SPP) jobs.push(job);
+      if(job.spp < SPP)
+        jobs.push(job);
 
-      if( jobs.empty() )
+      if(jobs.empty())
       {
         jobs_mtx.unlock();
         break;

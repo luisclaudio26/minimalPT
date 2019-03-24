@@ -76,6 +76,9 @@ void GUI::initialize_job_list()
 
 void GUI::drawContents()
 {
+  using namespace std::chrono;
+  static high_resolution_clock::time_point t_s = high_resolution_clock::now();
+
   // keep updating buffer
   shader.bind();
 
@@ -88,7 +91,9 @@ void GUI::drawContents()
   if( frame_counter >= refresh_period )
   {
     tp.hold();
-    integrator.reconstruct_image();
+    high_resolution_clock::time_point t_e = high_resolution_clock::now();
+    duration<double> time_span = duration_cast<duration<double>>(t_e - t_s);
+    integrator.reconstruct_image(time_span.count());
 
     // copy CPU color_buffer to GPU
     glActiveTexture(GL_TEXTURE0);
@@ -101,6 +106,7 @@ void GUI::drawContents()
 
     // resume
     frame_counter = 0;
+    t_s = high_resolution_clock::now();
     tp.resume();
   }
 

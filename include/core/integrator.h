@@ -73,6 +73,7 @@ public:
   void render(const Scene& scene);
   void render_patch(const Scene& scene, int I, int J, int w, int h);
   void reconstruct_image();
+  void reconstruct_image(double elapsed_time); //instrumented version
 };
 
 #endif

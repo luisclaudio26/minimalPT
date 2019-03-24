@@ -1,7 +1,9 @@
 #include "../include/frontend/gui.h"
+#include <string>
 
 int main(int argc, char** args)
 {
+  int n_threads = argc > 1 ? std::stoi(args[1]) : 1;
   srand(0);
 
   // "load" scene -----------
@@ -182,7 +184,7 @@ int main(int argc, char** args)
   // invoke renderer
   nanogui::init();
 
-  GUI myGUI(scene, integrator, 8);
+  GUI myGUI(scene, integrator, n_threads);
   myGUI.drawAll();
   myGUI.setVisible(true);
 
@@ -191,26 +193,6 @@ int main(int argc, char** args)
   nanogui::mainloop();
 
   nanogui::shutdown();
-
-  /*
-  Threadpool tp(8);
-  tp.resume();
-
-  for(int i = 0; i < 9; ++i)
-  {
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-
-    tp.hold();
-
-    std::cout<<"MAIN THREAD DOING SOMETHING\n";
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-    std::cout<<"ok good to go\n";
-
-    tp.resume();
-  }
-
-  for(auto t = tp.workers.begin(); t != tp.workers.end(); ++t) t->join();
-  */
 
   return 0;
 }

@@ -1,9 +1,9 @@
 #include "../../include/core/integrator.h"
 #include "../../include/core/sampler.h"
-#include <cstdio>
 #include <chrono>
 #include <thread>
 #include <vector>
+#include <iostream>
 
 using namespace std::chrono;
 
@@ -618,6 +618,26 @@ void Integrator::render_patch(const Scene& scene, int I, int J, int w, int h)
       samples[sample_add] += irradiance_sample;
       weights[sample_add] += 1.0f;
     }
+}
+
+void Integrator::reconstruct_image(double elapsed_time)
+{
+  static int last = 0;
+  static double total_time = 0.0;
+
+  int acc = 0;
+
+  for(int i = 0; i < vRes*hRes; ++i)
+  {
+    acc += weights[i];
+
+    RGB avg_irradiance = samples[i]/weights[i];
+    frame[i] = camera_response_curve(avg_irradiance);
+  }
+
+  total_time += elapsed_time;
+  std::cout<<"\r"<<(float)acc/(vRes*hRes)<<" spp, "<<(double)(acc-last)/elapsed_time<<" samples/sec (avg. "<<(double)acc/total_time<<" samples/sec)          "<<std::flush;
+  last = acc;
 }
 
 void Integrator::reconstruct_image()
