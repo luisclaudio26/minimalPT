@@ -14,6 +14,8 @@ typedef struct
   float pdf_bwd;   // PDF (surface area) of being selected by the next vertex
   float pdf_emi;   // PDF (surface area) of being selected as light source sample
   bool valid;      // is this vertex valid or not?
+
+  bool is_specular() const { return valid && isect.shape && (isect.shape->type == DELTA || isect.shape->type == GLASS); }
 } Vertex;
 
 static inline float geometric_coupling(const Vertex& v1, const Vertex& v2)
@@ -60,14 +62,18 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
 
   // preset path_pdf to 1.0 to avoid NaN samples when returning 0
   path_pdf = 1.0f;
+  weight = 1.0f;
 
   // discard path if it is not complete!
   // TODO: we could still use it to compute paths of smaller lenghts!
   const Vertex &v_l = vertices[vertex_t];
-  if( n_light_vertices > 0 && !v_l.valid ) return RGB(0.0f);
+  if( n_light_vertices > 0 && (!v_l.valid || v_l.is_specular()) ) return RGB(0.0f);
 
   const Vertex &v_c = vertices[vertex_s];
-  if( !v_c.valid ) return RGB(0.0f);
+  if( !v_c.valid || v_c.is_specular() ) return RGB(0.0f);
+
+  //TODO: discard strategies that try to connect paths ending with specular vertices
+  //if( v_c.is_specular() || v_l.is_specular() ) return RGB(0.f);
 
   // -----------------------------------------
   // ----------- Visibility check ------------
@@ -179,9 +185,7 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
 
   // denominator of Balance heuristic
   // TODO: Still lots of NaNs!!
-  // TODO: MIS in regular pathtracing handles light source reflects BETTER. This
-  // is probably because we discard light sampling for specular materials. We
-  // should do something similar here
+  // TODO: discard PDF when connection is made at specular vertices
   float den = path_pdf;
 
   // expand path PDF in the FORWARD sense (towards the light source)
@@ -196,13 +200,21 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
   if( n_light_vertices > 0 )
   {
     pdf_strat_fwd *= (conn_pdf_fwd / vertices[vertex_t].pdf_fwd);
-    den += pdf_strat_fwd;
+
+    // this strategy would never happen because of specular vertices at the
+    // connection point!
+    // -> this is accounted for in the beginning of this function
+    //if( !v_l.is_specular() && !v_c.is_specular() )
+      den += pdf_strat_fwd;
   }
 
   for(int i = vertex_t+1; i < vertices.size(); ++i)
   {
     pdf_strat_fwd *= (vertices[i].pdf_bwd / vertices[i].pdf_fwd);
-    den += pdf_strat_fwd;
+
+    // full camera paths are always accepted (because we do not have delta lights!)
+    if( i == vertices.size()-1 || (!vertices[i].is_specular() && !vertices[i+1].is_specular()) )
+      den += pdf_strat_fwd;
   }
 
   // expand PDF in the backward sense (towards the camera)
@@ -226,19 +238,27 @@ static RGB connect_paths(int n_cam_vertices, int n_light_vertices,
       // be a PDF in terms of emissive area, but rather something like p(x | y)!
       //pdf_strat_bwd *= (vertices[vertex_s].pdf_bwd / vertices[vertex_s].pdf_fwd);
       pdf_strat_bwd *= (vertices[vertex_s].pdf_emi / vertices[vertex_s].pdf_fwd);
+
+      if( !vertices[vertex_s-1].is_specular() )
+        den += pdf_strat_bwd;
     }
     else
     {
       pdf_strat_bwd *= (conn_pdf_bwd / vertices[vertex_s].pdf_fwd);
+      den += pdf_strat_bwd;
     }
 
-    den += pdf_strat_bwd;
+    // this cannot (should not!) be true at this point!
+    //if( !v_l.is_specular() && !v_c.is_specular() )
+
   }
 
   for(int i = vertex_s-1; i > 1; --i)
   {
     pdf_strat_bwd *= (vertices[i].pdf_bwd / vertices[i].pdf_fwd);
-    den += pdf_strat_bwd;
+
+    if( !vertices[i].is_specular() && !vertices[i-1].is_specular() )
+      den += pdf_strat_bwd;
   }
 
   // final weight according to balance heuristic
@@ -272,6 +292,7 @@ RGB Integrator::bd_path(const Scene& scene,
     v.pdf_fwd = 1.0f;
     v.pdf_bwd = -1.0f;
     v.pdf_emi = -1.0f;
+    v.isect.shape = NULL;
   }
 
   // ---------------------------------------------------
@@ -543,6 +564,7 @@ RGB Integrator::bd_path(const Scene& scene,
 
   // TODO: discard sampling strategies that are virtually "impossible" (like
   // connecting light vertices to camera vertices originating in specular materials)
+
   RGB out(0.0f);
   for(int l = 2; l <= path_length; ++l)
   {

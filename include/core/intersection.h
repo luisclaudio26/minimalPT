@@ -16,6 +16,8 @@ public:
 
   //TODO: are t = INF intersections valid?
   bool is_valid() const { return t > 0 && t < FLT_MAX; }
+
+  Isect() : shape(NULL), t(-1.f) {}
 };
 
 #endif

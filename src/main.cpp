@@ -137,6 +137,43 @@ int main(int argc, char** args)
   */
   // </editor-fold>
 
+  // <editor-fold> Scene IV
+  /*
+  float R = 1000.0f;
+  Shape ball_floor(Vec3(0.0f,-R,0.0f), R);
+  ball_floor.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_floor);
+
+  Shape ball_ceil(Vec3(0.0f,R+1.0f,0.0f), R);
+  ball_ceil.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_ceil);
+
+  Shape ball_right(Vec3(R+0.5f, 0.0f, 0.0f), R);
+  ball_right.diff_color = RGB(0.0f, 1.0f, 0.0f);
+  scene.add_primitive(ball_right);
+
+  Shape ball_left(Vec3(-(R+0.5f), 0.0f, 0.0f), R);
+  ball_left.diff_color = RGB(1.0f, 0.0f, 0.0f);
+  scene.add_primitive(ball_left);
+
+  Shape ball_back(Vec3(0.0f, 0.0f, -(R+1.0f)), R);
+  ball_back.diff_color = RGB(1.0f, 1.0f, 1.0f);
+  scene.add_primitive(ball_back);
+
+  Shape ball_1(Vec3(0.0f,0.2f,-0.2f), 0.1f);
+  ball_1.type = GLASS;
+  ball_1.eta = 0.45f;
+  scene.add_primitive(ball_1);
+
+  float w = 10.0f;
+  //Shape ball_light(Vec3(0.0f,0.9f,-0.4f), 0.05f);
+  Shape ball_light(Vec3(0.0f,0.7f,-0.4f), 0.1f);
+  ball_light.emission = RGB(w, w, w);
+  ball_light.diff_color = RGB(0.0f, 0.0f, 0.0f);
+  scene.add_primitive(ball_light);
+  */
+  // </editor-fold>
+
   // -------------------------------------------------
   // configure integrator and film settings ----------
   Integrator integrator;

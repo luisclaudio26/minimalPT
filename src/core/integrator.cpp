@@ -272,10 +272,12 @@ RGB Integrator::pathtracer(const Scene& scene,
   // underestimating the total radiance, thus the image
   // is always darker than it should
   const int max_length = 7;
+
   RGB rad(0.0f);
   for(int i = 2; i <= max_length; ++i)
     rad += camera_path(scene, primary_ray, isect, i);
   return rad;
+
 
   //return camera_path(scene, primary_ray, isect, 5);
 }
@@ -550,8 +552,8 @@ void Integrator::render(const Scene& scene)
 
       Isect isect; RGB rad(0.0f, 0.0f, 0.0f);
       if( scene.cast_ray(primary_ray, isect) )
-        //rad = pathtracer(scene, primary_ray, isect);
-        rad = bdpt(scene, primary_ray, lens_normal, isect);
+        rad = pathtracer(scene, primary_ray, isect);
+        //rad = bdpt(scene, primary_ray, lens_normal, isect);
 
       // cosine-weight radiance measure coming from emission_measure().
       // as explained above, for a pinhole camera, this is our irradiance sample.
